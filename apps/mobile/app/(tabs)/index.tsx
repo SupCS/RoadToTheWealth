@@ -1,10 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
-import { Card, layoutStyles, Screen, ScreenHeader } from '@/src/design/layout';
+import { Card, layoutStyles, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
+import { RatesWidget } from '@/src/fx/rates-widget';
 import { useSettings } from '@/src/settings/settings-context';
 
 export default function HomeScreen() {
   const { t, theme } = useSettings();
+  const router = useRouter();
   return (
     <Screen>
       <ScreenHeader eyebrow="RTTW" title="Road To The Wealth" />
@@ -30,7 +33,9 @@ export default function HomeScreen() {
       <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('recent')}</Text>
       <Card>
         <Text style={[styles.empty, { color: theme.muted }]}>{t('noTransactions')}</Text>
+        <PrimaryButton label={t('addTransaction')} onPress={() => router.push('/transaction/new')} />
       </Card>
+      <RatesWidget />
     </Screen>
   );
 }

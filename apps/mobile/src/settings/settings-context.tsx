@@ -6,9 +6,16 @@ import { messages, type Locale } from '@/src/i18n/translations';
 
 const SETTINGS_KEY = 'rttw.preferences.v1';
 
+export const currencyCatalog = ['GEL', 'USD', 'EUR', 'UAH', 'GBP', 'TRY', 'PLN', 'CHF', 'RUB'] as const;
+export type CurrencyCode = (typeof currencyCatalog)[number];
+
 type SettingsContextValue = {
   isReady: boolean;
+  baseCurrency: CurrencyCode;
+  enabledCurrencies: CurrencyCode[];
   locale: Locale;
+  setBaseCurrency: (currency: CurrencyCode) => void;
+  setEnabledCurrencies: (currencies: CurrencyCode[]) => void;
   setLocale: (locale: Locale) => void;
   setThemeId: (themeId: ThemeId) => void;
   theme: AppTheme;
@@ -26,9 +33,15 @@ function isThemeId(value: unknown): value is ThemeId {
   return themes.some((theme) => theme.id === value);
 }
 
+function isCurrencyCode(value: unknown): value is CurrencyCode {
+  return typeof value === 'string' && currencyCatalog.includes(value as CurrencyCode);
+}
+
 export function SettingsProvider({ children }: PropsWithChildren) {
   const [locale, setLocaleState] = useState<Locale>('en');
   const [themeId, setThemeIdState] = useState<ThemeId>('wealth');
+  const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>('GEL');
+  const [enabledCurrencies, setEnabledCurrencies] = useState<CurrencyCode[]>(['USD', 'EUR', 'UAH']);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -38,9 +51,14 @@ export function SettingsProvider({ children }: PropsWithChildren) {
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
           if (parsed && typeof parsed === 'object') {
-            const settings = parsed as { locale?: unknown; themeId?: unknown };
+            const settings = parsed as { baseCurrency?: unknown; enabledCurrencies?: unknown; locale?: unknown; themeId?: unknown };
             if (isLocale(settings.locale)) setLocaleState(settings.locale);
             if (isThemeId(settings.themeId)) setThemeIdState(settings.themeId);
+            if (isCurrencyCode(settings.baseCurrency)) setBaseCurrency(settings.baseCurrency);
+            if (Array.isArray(settings.enabledCurrencies)) {
+              const validCurrencies = settings.enabledCurrencies.filter(isCurrencyCode);
+              setEnabledCurrencies([...new Set(validCurrencies)]);
+            }
           }
         }
       } catch {
@@ -55,21 +73,25 @@ export function SettingsProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!isReady) return;
-    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ locale, themeId }));
-  }, [isReady, locale, themeId]);
+    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ baseCurrency, enabledCurrencies, locale, themeId }));
+  }, [baseCurrency, enabledCurrencies, isReady, locale, themeId]);
 
   const value = useMemo<SettingsContextValue>(() => {
     const theme = themes.find((item) => item.id === themeId) ?? themes[0]!;
     return {
+      baseCurrency,
+      enabledCurrencies,
       isReady,
       locale,
+      setBaseCurrency,
+      setEnabledCurrencies,
       setLocale: setLocaleState,
       setThemeId: setThemeIdState,
       theme,
       themeId,
       t: (key) => messages[locale][key],
     };
-  }, [isReady, locale, themeId]);
+  }, [baseCurrency, enabledCurrencies, isReady, locale, themeId]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

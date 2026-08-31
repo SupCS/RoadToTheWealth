@@ -98,9 +98,13 @@ A roadmap is an ordered/dependent set of goals, for example: repay expensive deb
 ## 10. Dashboard and reports
 
 - Net worth, available cash, monthly income/expense, remaining budget, nearest goal, and recent activity.
+- Configurable exchange-rate widget showing the household base currency against globally enabled currencies.
+- Opening a currency pair shows its current value and historical movement; the initial view covers 30 days and may later support selectable periods.
 - Trends by month, category, member, account, currency, and source.
 - Cash flow, recurring commitments, goal progress, and end-of-month forecast.
 - Original-currency and converted values remain inspectable.
+
+Currency visibility is a global user preference: currencies disabled in Settings are hidden from the rate widget, selectors, and reports unless required to display an existing historical transaction.
 
 ## 11. Themes
 
@@ -149,4 +153,3 @@ Each theme defines semantic tokens for background, surface, text, muted text, pr
 - Cryptocurrency portfolio pricing.
 - OCR for arbitrary scanned PDFs.
 - Public multi-tenant release and paid subscriptions.
-
