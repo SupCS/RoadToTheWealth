@@ -12,10 +12,10 @@ function isCurrencyCode(value: string): value is CurrencyCode {
 
 export default function RateHistoryScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ inverted?: string; quote?: string }>();
-  const { baseCurrency, locale, t, theme } = useSettings();
+  const params = useLocalSearchParams<{ quote?: string }>();
+  const { baseCurrency, isPairInverted, locale, t, theme, togglePairInverted } = useSettings();
   const quote = params.quote && isCurrencyCode(params.quote) ? params.quote : 'USD';
-  const inverted = params.inverted === '1';
+  const inverted = isPairInverted(baseCurrency, quote);
   const pairBase = inverted ? quote : baseCurrency;
   const pairQuote = inverted ? baseCurrency : quote;
   const { error, loading, rates } = useRateHistory(pairBase, pairQuote);
@@ -32,7 +32,17 @@ export default function RateHistoryScreen() {
         <Text style={[styles.backText, { color: theme.primary }]}>{t('back')}</Text>
       </Pressable>
       <Text style={[styles.eyebrow, { color: theme.muted }]}>{t('rateHistory')}</Text>
-      <Text style={[styles.title, { color: theme.text }]}>{pairBase}/{pairQuote}</Text>
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, { color: theme.text }]}>{pairBase}/{pairQuote}</Text>
+        <Pressable
+          accessibilityLabel={t('invertRates')}
+          accessibilityRole="button"
+          onPress={() => togglePairInverted(baseCurrency, quote)}
+          style={({ pressed }) => [styles.swapButton, { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <MaterialCommunityIcons color={theme.primary} name="swap-horizontal" size={26} />
+        </Pressable>
+      </View>
       <Text style={[styles.period, { color: theme.muted }]}>{t('oneMonth')}</Text>
 
       <Card>
@@ -67,6 +77,8 @@ const styles = StyleSheet.create({
   backText: { fontSize: 15, fontWeight: '700' },
   eyebrow: { fontSize: 12, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
   title: { fontSize: 34, fontWeight: '900', marginTop: 4 },
+  titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  swapButton: { alignItems: 'center', borderRadius: 13, borderWidth: 1, justifyContent: 'center', padding: 9 },
   period: { fontSize: 14, marginBottom: 18, marginTop: 3 },
   latest: { fontSize: 30, fontVariant: ['tabular-nums'], fontWeight: '800' },
   chart: { alignItems: 'flex-end', flexDirection: 'row', gap: 2, height: 140, marginTop: 20 },
