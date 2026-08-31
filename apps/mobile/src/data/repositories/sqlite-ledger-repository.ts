@@ -3,7 +3,16 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import type { MoneyCurrencyCode } from '../../domain/money/currencies';
 import { money } from '../../domain/money/money';
 
-import type { Account, BalanceScope, Household, HouseholdMember, LedgerRepository } from './ledger-repository';
+import type {
+  Account,
+  BalanceScope,
+  Category,
+  Household,
+  HouseholdMember,
+  LedgerRepository,
+  Transaction,
+  TransactionSplit,
+} from './ledger-repository';
 
 type AccountRow = {
   id: string;
@@ -24,6 +33,26 @@ type AccountRow = {
 };
 
 type BalanceRow = { amount_minor: string; currency_code: MoneyCurrencyCode };
+
+type CategoryRow = {
+  id: string;
+  household_id: string | null;
+  parent_id: string | null;
+  applicability: Category['applicability'];
+  system_key: string | null;
+  name_en: string;
+  name_uk: string;
+  name_ru: string;
+  icon: string | null;
+  color_token: string | null;
+  is_archived: number;
+  created_at: string;
+  updated_at: string;
+  created_by_member_id: string | null;
+  updated_by_member_id: string | null;
+  revision: number;
+  deleted_at: string | null;
+};
 
 export class SQLiteLedgerRepository implements LedgerRepository {
   constructor(private readonly db: SQLiteDatabase) {}
@@ -137,6 +166,83 @@ export class SQLiteLedgerRepository implements LedgerRepository {
 
     return rows.map((row) => money(BigInt(row.amount_minor), row.currency_code));
   }
+
+  async saveCategory(value: Category): Promise<void> {
+    await this.db.runAsync(
+      `INSERT INTO categories (
+        id, household_id, parent_id, applicability, system_key, name_en, name_uk, name_ru,
+        icon, color_token, is_archived, created_at, updated_at, created_by_member_id,
+        updated_by_member_id, revision, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        parent_id = excluded.parent_id,
+        applicability = excluded.applicability,
+        name_en = excluded.name_en,
+        name_uk = excluded.name_uk,
+        name_ru = excluded.name_ru,
+        icon = excluded.icon,
+        color_token = excluded.color_token,
+        is_archived = excluded.is_archived,
+        updated_at = excluded.updated_at,
+        updated_by_member_id = excluded.updated_by_member_id,
+        revision = excluded.revision,
+        deleted_at = excluded.deleted_at
+      WHERE excluded.revision > categories.revision`,
+      value.id, value.householdId, value.parentId, value.applicability, value.systemKey,
+      value.names.en, value.names.uk, value.names.ru, value.icon, value.colorToken,
+      value.isArchived ? 1 : 0, value.createdAt, value.updatedAt, value.createdByMemberId,
+      value.updatedByMemberId, value.revision, value.deletedAt,
+    );
+  }
+
+  async listCategories(householdId: string): Promise<Category[]> {
+    const rows = await this.db.getAllAsync<CategoryRow>(
+      `SELECT id, household_id, parent_id, applicability, system_key, name_en, name_uk, name_ru,
+        icon, color_token, is_archived, created_at, updated_at, created_by_member_id,
+        updated_by_member_id, revision, deleted_at
+      FROM categories
+      WHERE (household_id = ? OR household_id IS NULL) AND deleted_at IS NULL
+      ORDER BY is_archived, applicability, name_en COLLATE NOCASE`,
+      householdId,
+    );
+    return rows.map(mapCategory);
+  }
+
+  async saveTransaction(value: Transaction, splits: TransactionSplit[]): Promise<void> {
+    assertSplitsMatchTransaction(value, splits);
+
+    await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
+      await transactionDb.runAsync(
+        `INSERT INTO transactions (
+          id, household_id, account_id, member_id, category_id, transaction_type,
+          transaction_date, posting_date, source, status, amount_minor, currency_code,
+          reporting_amount_minor, reporting_currency_code, fx_rate_decimal, fx_provider,
+          fx_requested_date, fx_effective_date, description, notes, created_at, updated_at,
+          created_by_member_id, updated_by_member_id, revision, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        value.id, value.householdId, value.accountId, value.memberId, value.categoryId,
+        value.transactionType, value.transactionDate, value.postingDate, value.source, value.status,
+        value.originalAmount.amountMinor.toString(), value.originalAmount.currency,
+        value.reportingAmount?.amountMinor.toString() ?? null, value.reportingAmount?.currency ?? null,
+        value.fxSnapshot?.rateDecimal ?? null, value.fxSnapshot?.provider ?? null,
+        value.fxSnapshot?.requestedDate ?? null, value.fxSnapshot?.effectiveDate ?? null,
+        value.description, value.notes, value.createdAt, value.updatedAt, value.createdByMemberId,
+        value.updatedByMemberId, value.revision, value.deletedAt,
+      );
+
+      for (const split of splits) {
+        await transactionDb.runAsync(
+          `INSERT INTO transaction_splits (
+            id, household_id, transaction_id, category_id, amount_minor, currency_code,
+            created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          split.id, split.householdId, split.transactionId, split.categoryId,
+          split.amount.amountMinor.toString(), split.amount.currency, split.createdAt, split.updatedAt,
+          split.createdByMemberId, split.updatedByMemberId, split.revision, split.deletedAt,
+        );
+      }
+    });
+  }
 }
 
 function mapAccount(row: AccountRow): Account {
@@ -156,4 +262,42 @@ function mapAccount(row: AccountRow): Account {
     revision: row.revision,
     deletedAt: row.deleted_at,
   };
+}
+
+function mapCategory(row: CategoryRow): Category {
+  return {
+    id: row.id,
+    householdId: row.household_id,
+    parentId: row.parent_id,
+    applicability: row.applicability,
+    systemKey: row.system_key,
+    names: { en: row.name_en, uk: row.name_uk, ru: row.name_ru },
+    icon: row.icon,
+    colorToken: row.color_token,
+    isArchived: row.is_archived === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    createdByMemberId: row.created_by_member_id,
+    updatedByMemberId: row.updated_by_member_id,
+    revision: row.revision,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function assertSplitsMatchTransaction(value: Transaction, splits: TransactionSplit[]): void {
+  if (splits.length === 0) return;
+
+  let total = 0n;
+  for (const split of splits) {
+    if (split.householdId !== value.householdId || split.transactionId !== value.id) {
+      throw new Error('Split does not belong to the transaction');
+    }
+    if (split.amount.currency !== value.originalAmount.currency) {
+      throw new Error('Split currency must match the transaction currency');
+    }
+    if (split.deletedAt === null) total += split.amount.amountMinor;
+  }
+  if (total !== value.originalAmount.amountMinor) {
+    throw new Error('Active splits must sum exactly to the transaction amount');
+  }
 }
