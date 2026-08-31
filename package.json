@@ -1,0 +1,15 @@
+{
+  "name": "road-to-the-wealth",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "mobile": "npm --prefix apps/mobile start",
+    "mobile:clear": "npm --prefix apps/mobile run start:clear",
+    "api": "npm --prefix apps/api run dev",
+    "check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/api run typecheck"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
+
