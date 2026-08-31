@@ -16,7 +16,7 @@ These instructions apply to the entire repository. A more specific `AGENTS.md` m
 
 ## Architecture
 
-- Mobile: Expo SDK 57, React Native, TypeScript.
+- Mobile: Expo SDK 54, React Native, TypeScript. SDK 54 is temporary while physical-device testing uses the store version of Expo Go; reassess when development builds are introduced.
 - API: Fastify and TypeScript, deployed as a stateless Railway service.
 - Cloud database: Railway PostgreSQL.
 - Device database: Expo SQLite (planned integration).
@@ -41,4 +41,3 @@ These instructions apply to the entire repository. A more specific `AGENTS.md` m
 - New text exists in English, Ukrainian, and Russian.
 - New UI works with every theme token set and does not depend on a specific palette.
 - Sensitive logs contain no transaction descriptions, tokens, imported files, or personal identifiers.
-
