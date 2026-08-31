@@ -34,7 +34,7 @@ describe('migrateDatabase', () => {
 
     await migrateDatabase(state.database as never);
 
-    expect(state.appliedVersions).toEqual([1, 2]);
+    expect(state.appliedVersions).toEqual([1, 2, 3]);
     expect(state.getVersion()).toBe(DATABASE_VERSION);
   });
 
@@ -66,6 +66,17 @@ describe('migrateDatabase', () => {
     expect(schemaSql).toContain('amount_minor INTEGER NOT NULL');
     expect(schemaSql).toContain('revision INTEGER NOT NULL DEFAULT 1');
     expect(schemaSql).toContain('deleted_at TEXT');
-    expect(state.appliedVersions).toEqual([2]);
+    expect(state.appliedVersions).toEqual([2, 3]);
+  });
+
+  it('adds localized built-in categories in migration 3', async () => {
+    const state = createDatabase(2);
+    await migrateDatabase(state.database as never);
+
+    const sql = state.executedSql.join('\n');
+    expect(sql).toContain("'Groceries', 'Продукти', 'Продукты'");
+    expect(sql).toContain("'Salary', 'Зарплата', 'Зарплата'");
+    expect(sql).toContain('categories_system_key_idx');
+    expect(state.appliedVersions).toEqual([3]);
   });
 });

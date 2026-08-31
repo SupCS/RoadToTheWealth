@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -153,6 +153,49 @@ const migrations = [
       CREATE INDEX transactions_account_date_idx ON transactions(account_id, transaction_date, deleted_at);
       CREATE INDEX transactions_household_date_idx ON transactions(household_id, transaction_date, deleted_at);
       CREATE INDEX transaction_splits_transaction_idx ON transaction_splits(transaction_id, deleted_at);
+    `,
+  },
+  {
+    version: 3,
+    sql: `
+      CREATE UNIQUE INDEX categories_system_key_idx
+        ON categories(system_key) WHERE system_key IS NOT NULL;
+
+      INSERT INTO categories (
+        id, household_id, parent_id, applicability, system_key,
+        name_en, name_uk, name_ru, icon, color_token, is_archived,
+        created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
+      ) VALUES
+        ('10000000-0000-4000-8000-000000000001', NULL, NULL, 'expense', 'groceries',
+          'Groceries', 'Продукти', 'Продукты', 'cart', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000002', NULL, NULL, 'expense', 'dining',
+          'Dining out', 'Кафе та ресторани', 'Кафе и рестораны', 'restaurant', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000003', NULL, NULL, 'expense', 'transport',
+          'Transport', 'Транспорт', 'Транспорт', 'car', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000004', NULL, NULL, 'expense', 'housing',
+          'Housing', 'Житло', 'Жильё', 'home', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000005', NULL, NULL, 'expense', 'utilities',
+          'Utilities', 'Комунальні послуги', 'Коммунальные услуги', 'flash', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000006', NULL, NULL, 'expense', 'health',
+          'Health', 'Здоровʼя', 'Здоровье', 'medical', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000007', NULL, NULL, 'expense', 'entertainment',
+          'Entertainment', 'Розваги', 'Развлечения', 'film', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000008', NULL, NULL, 'expense', 'shopping',
+          'Shopping', 'Покупки', 'Покупки', 'bag', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000009', NULL, NULL, 'income', 'salary',
+          'Salary', 'Зарплата', 'Зарплата', 'wallet', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL),
+        ('10000000-0000-4000-8000-000000000010', NULL, NULL, 'income', 'other_income',
+          'Other income', 'Інший дохід', 'Другой доход', 'add-circle', NULL, 0,
+          '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL);
     `,
   },
 ] as const;
