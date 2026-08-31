@@ -38,6 +38,11 @@ export type BalanceScope =
   | Readonly<{ kind: 'household'; householdId: string }>
   | Readonly<{ kind: 'personal'; householdId: string; memberId: string }>;
 
+export type AccountSummary = Readonly<{
+  account: Account;
+  currentBalance: Money;
+}>;
+
 export type Category = AuditFields & Readonly<{
   householdId: string | null;
   parentId: string | null;
@@ -80,9 +85,11 @@ export type TransactionSplit = AuditFields & Readonly<{
 
 export interface LedgerRepository {
   saveHousehold(household: Household): Promise<void>;
+  getActiveHousehold(): Promise<Household | null>;
   saveMember(member: HouseholdMember): Promise<void>;
   saveAccount(account: Account): Promise<void>;
   listAccounts(householdId: string): Promise<Account[]>;
+  listAccountSummaries(householdId: string): Promise<AccountSummary[]>;
   getBalances(scope: BalanceScope): Promise<Money[]>;
   saveCategory(category: Category): Promise<void>;
   listCategories(householdId: string): Promise<Category[]>;

@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 
 import { Card, layoutStyles, MoneyText, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { money } from '@/src/domain/money/money';
@@ -30,6 +30,11 @@ export default function HomeScreen() {
           <View style={[styles.progress, { backgroundColor: theme.accent }]} />
         </View>
         <Text style={[styles.prototype, { color: theme.muted }]}>{t('prototype')}</Text>
+      </Card>
+      <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('accounts')}</Text>
+      <Card>
+        <Text style={[styles.empty, { color: theme.muted }]}>{t('accountsHint')}</Text>
+        <PrimaryButton label={t('viewAccounts')} onPress={() => router.push('/accounts' as Href)} />
       </Card>
       <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('recent')}</Text>
       <Card>

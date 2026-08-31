@@ -13,6 +13,7 @@ function RootNavigator() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ contentStyle: { backgroundColor: theme.background }, headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="accounts/index" />
         <Stack.Screen name="transaction/new" />
         <Stack.Screen name="fx/[quote]" />
       </Stack>

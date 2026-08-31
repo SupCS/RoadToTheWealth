@@ -5,6 +5,7 @@ import { money } from '../../domain/money/money';
 
 import type {
   Account,
+  AccountSummary,
   BalanceScope,
   Category,
   Household,
@@ -33,6 +34,20 @@ type AccountRow = {
 };
 
 type BalanceRow = { amount_minor: string; currency_code: MoneyCurrencyCode };
+
+type HouseholdRow = {
+  id: string;
+  name: string;
+  base_currency_code: MoneyCurrencyCode;
+  created_at: string;
+  updated_at: string;
+  created_by_member_id: string | null;
+  updated_by_member_id: string | null;
+  revision: number;
+  deleted_at: string | null;
+};
+
+type AccountSummaryRow = AccountRow & { current_balance_minor: string };
 
 type CategoryRow = {
   id: string;
@@ -74,6 +89,29 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       value.id, value.name, value.baseCurrency, value.createdAt, value.updatedAt,
       value.createdByMemberId, value.updatedByMemberId, value.revision, value.deletedAt,
     );
+  }
+
+  async getActiveHousehold(): Promise<Household | null> {
+    const row = await this.db.getFirstAsync<HouseholdRow>(
+      `SELECT id, name, base_currency_code, created_at, updated_at,
+        created_by_member_id, updated_by_member_id, revision, deleted_at
+      FROM households
+      WHERE deleted_at IS NULL
+      ORDER BY created_at
+      LIMIT 1`,
+    );
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      baseCurrency: row.base_currency_code,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      createdByMemberId: row.created_by_member_id,
+      updatedByMemberId: row.updated_by_member_id,
+      revision: row.revision,
+      deletedAt: row.deleted_at,
+    };
   }
 
   async saveMember(value: HouseholdMember): Promise<void> {
@@ -137,6 +175,28 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     );
 
     return rows.map(mapAccount);
+  }
+
+  async listAccountSummaries(householdId: string): Promise<AccountSummary[]> {
+    const rows = await this.db.getAllAsync<AccountSummaryRow>(
+      `SELECT a.id, a.household_id, a.ownership_scope, a.owner_member_id, a.name, a.account_type,
+        CAST(a.opening_balance_minor AS TEXT) AS opening_balance_minor, a.currency_code,
+        a.is_archived, a.created_at, a.updated_at, a.created_by_member_id,
+        a.updated_by_member_id, a.revision, a.deleted_at,
+        CAST(a.opening_balance_minor + COALESCE(SUM(
+          CASE WHEN t.status = 'confirmed' AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
+        ), 0) AS TEXT) AS current_balance_minor
+      FROM accounts a
+      LEFT JOIN transactions t ON t.account_id = a.id
+      WHERE a.household_id = ? AND a.deleted_at IS NULL
+      GROUP BY a.id
+      ORDER BY a.is_archived, a.name COLLATE NOCASE`,
+      householdId,
+    );
+    return rows.map((row) => ({
+      account: mapAccount(row),
+      currentBalance: money(BigInt(row.current_balance_minor), row.currency_code),
+    }));
   }
 
   async getBalances(scope: BalanceScope) {

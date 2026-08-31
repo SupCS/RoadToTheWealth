@@ -49,6 +49,22 @@ describe('SQLiteLedgerRepository', () => {
     expect(db.getAllAsync.mock.calls[1]?.[1]).toEqual(['household-1', 'member-1']);
   });
 
+  it('maps account summaries without losing current balance precision', async () => {
+    const db = createDatabase([{
+      id: 'account-1', household_id: 'household-1', ownership_scope: 'shared', owner_member_id: null,
+      name: 'Reserve', account_type: 'savings', opening_balance_minor: '0', currency_code: 'USD',
+      is_archived: 0, current_balance_minor: '9007199254740993', ...{
+        created_at: audit.createdAt, updated_at: audit.updatedAt, created_by_member_id: null,
+        updated_by_member_id: null, revision: 1, deleted_at: null,
+      },
+    }]);
+    const repository = new SQLiteLedgerRepository(db as never);
+
+    const summaries = await repository.listAccountSummaries('household-1');
+
+    expect(summaries[0]?.currentBalance.amountMinor).toBe(9_007_199_254_740_993n);
+  });
+
   it('writes a transaction and its splits in one exclusive transaction', async () => {
     const db = createDatabase();
     const repository = new SQLiteLedgerRepository(db as never);
