@@ -8,14 +8,30 @@ import { useSettings } from '@/src/settings/settings-context';
 
 export function RatesWidget() {
   const router = useRouter();
-  const { baseCurrency, enabledCurrencies, locale, t, theme } = useSettings();
+  const {
+    baseCurrency,
+    enabledCurrencies,
+    locale,
+    setWidgetRatesInverted,
+    t,
+    theme,
+    widgetRatesInverted,
+  } = useSettings();
   const { error, fetchedAt, loading, rates } = useLatestRates(baseCurrency, enabledCurrencies);
 
   return (
     <View>
       <View style={styles.headingRow}>
         <Text style={[layoutStyles.sectionTitle, styles.heading, { color: theme.text }]}>{t('exchangeRates')}</Text>
-        <MaterialCommunityIcons color={theme.primary} name="chart-line" size={22} />
+        <Pressable
+          accessibilityLabel={t('invertRates')}
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={() => setWidgetRatesInverted(!widgetRatesInverted)}
+          style={({ pressed }) => [styles.swapButton, { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}
+        >
+          <MaterialCommunityIcons color={theme.primary} name="swap-horizontal" size={22} />
+        </Pressable>
       </View>
       <Card>
         {loading ? <ActivityIndicator color={theme.primary} /> : null}
@@ -25,15 +41,15 @@ export function RatesWidget() {
           <Pressable
             accessibilityRole="button"
             key={`${item.base}-${item.quote}`}
-            onPress={() => router.push({ pathname: '/fx/[quote]', params: { quote: item.quote } })}
+            onPress={() => router.push({ pathname: '/fx/[quote]', params: { inverted: widgetRatesInverted ? '1' : '0', quote: item.quote } })}
             style={[styles.rateRow, index > 0 && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}
           >
             <View>
-              <Text style={[styles.pair, { color: theme.text }]}>{item.base}/{item.quote}</Text>
+              <Text style={[styles.pair, { color: theme.text }]}>{widgetRatesInverted ? `${item.quote}/${item.base}` : `${item.base}/${item.quote}`}</Text>
               <Text style={[styles.date, { color: theme.muted }]}>{item.date}</Text>
             </View>
             <View style={styles.valueRow}>
-              <Text style={[styles.value, { color: theme.text }]}>{item.rate.toLocaleString(locale, { maximumFractionDigits: 5 })}</Text>
+              <Text style={[styles.value, { color: theme.text }]}>{(widgetRatesInverted ? 1 / item.rate : item.rate).toLocaleString(locale, { maximumFractionDigits: 5 })}</Text>
               <MaterialCommunityIcons color={theme.muted} name="chevron-right" size={20} />
             </View>
           </Pressable>
@@ -48,6 +64,7 @@ export function RatesWidget() {
 const styles = StyleSheet.create({
   headingRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   heading: { marginBottom: 12 },
+  swapButton: { alignItems: 'center', borderRadius: 12, borderWidth: 1, justifyContent: 'center', padding: 7 },
   rateRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 58, paddingVertical: 8 },
   pair: { fontSize: 16, fontWeight: '800' },
   date: { fontSize: 11, marginTop: 2 },

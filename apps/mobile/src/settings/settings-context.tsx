@@ -18,9 +18,11 @@ type SettingsContextValue = {
   setEnabledCurrencies: (currencies: CurrencyCode[]) => void;
   setLocale: (locale: Locale) => void;
   setThemeId: (themeId: ThemeId) => void;
+  setWidgetRatesInverted: (inverted: boolean) => void;
   theme: AppTheme;
   themeId: ThemeId;
   t: (key: keyof (typeof messages)['en']) => string;
+  widgetRatesInverted: boolean;
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -42,6 +44,7 @@ export function SettingsProvider({ children }: PropsWithChildren) {
   const [themeId, setThemeIdState] = useState<ThemeId>('wealth');
   const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>('GEL');
   const [enabledCurrencies, setEnabledCurrencies] = useState<CurrencyCode[]>(['USD', 'EUR', 'UAH']);
+  const [widgetRatesInverted, setWidgetRatesInverted] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -51,7 +54,7 @@ export function SettingsProvider({ children }: PropsWithChildren) {
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
           if (parsed && typeof parsed === 'object') {
-            const settings = parsed as { baseCurrency?: unknown; enabledCurrencies?: unknown; locale?: unknown; themeId?: unknown };
+            const settings = parsed as { baseCurrency?: unknown; enabledCurrencies?: unknown; locale?: unknown; themeId?: unknown; widgetRatesInverted?: unknown };
             if (isLocale(settings.locale)) setLocaleState(settings.locale);
             if (isThemeId(settings.themeId)) setThemeIdState(settings.themeId);
             if (isCurrencyCode(settings.baseCurrency)) setBaseCurrency(settings.baseCurrency);
@@ -59,6 +62,7 @@ export function SettingsProvider({ children }: PropsWithChildren) {
               const validCurrencies = settings.enabledCurrencies.filter(isCurrencyCode);
               setEnabledCurrencies([...new Set(validCurrencies)]);
             }
+            if (typeof settings.widgetRatesInverted === 'boolean') setWidgetRatesInverted(settings.widgetRatesInverted);
           }
         }
       } catch {
@@ -73,8 +77,8 @@ export function SettingsProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!isReady) return;
-    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ baseCurrency, enabledCurrencies, locale, themeId }));
-  }, [baseCurrency, enabledCurrencies, isReady, locale, themeId]);
+    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ baseCurrency, enabledCurrencies, locale, themeId, widgetRatesInverted }));
+  }, [baseCurrency, enabledCurrencies, isReady, locale, themeId, widgetRatesInverted]);
 
   const value = useMemo<SettingsContextValue>(() => {
     const theme = themes.find((item) => item.id === themeId) ?? themes[0]!;
@@ -87,11 +91,13 @@ export function SettingsProvider({ children }: PropsWithChildren) {
       setEnabledCurrencies,
       setLocale: setLocaleState,
       setThemeId: setThemeIdState,
+      setWidgetRatesInverted,
       theme,
       themeId,
       t: (key) => messages[locale][key],
+      widgetRatesInverted,
     };
-  }, [baseCurrency, enabledCurrencies, isReady, locale, themeId]);
+  }, [baseCurrency, enabledCurrencies, isReady, locale, themeId, widgetRatesInverted]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

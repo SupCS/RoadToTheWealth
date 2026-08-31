@@ -41,6 +41,7 @@ export const messages = {
     rateHistory: 'Rate history',
     oneMonth: 'Last 30 days',
     back: 'Back',
+    invertRates: 'Swap rate direction',
   },
   uk: {
     home: 'Головна',
@@ -76,6 +77,7 @@ export const messages = {
     rateHistory: 'Історія курсу',
     oneMonth: 'Останні 30 днів',
     back: 'Назад',
+    invertRates: 'Поміняти напрямок курсу',
   },
   ru: {
     home: 'Главная',
@@ -111,5 +113,6 @@ export const messages = {
     rateHistory: 'История курса',
     oneMonth: 'Последние 30 дней',
     back: 'Назад',
+    invertRates: 'Поменять направление курса',
   },
 } satisfies Record<Locale, Record<string, string>>;

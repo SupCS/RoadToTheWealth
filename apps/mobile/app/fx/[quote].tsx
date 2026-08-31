@@ -12,10 +12,13 @@ function isCurrencyCode(value: string): value is CurrencyCode {
 
 export default function RateHistoryScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ quote?: string }>();
+  const params = useLocalSearchParams<{ inverted?: string; quote?: string }>();
   const { baseCurrency, locale, t, theme } = useSettings();
   const quote = params.quote && isCurrencyCode(params.quote) ? params.quote : 'USD';
-  const { error, loading, rates } = useRateHistory(baseCurrency, quote);
+  const inverted = params.inverted === '1';
+  const pairBase = inverted ? quote : baseCurrency;
+  const pairQuote = inverted ? baseCurrency : quote;
+  const { error, loading, rates } = useRateHistory(pairBase, pairQuote);
   const values = rates.map((item) => item.rate);
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 0;
@@ -29,7 +32,7 @@ export default function RateHistoryScreen() {
         <Text style={[styles.backText, { color: theme.primary }]}>{t('back')}</Text>
       </Pressable>
       <Text style={[styles.eyebrow, { color: theme.muted }]}>{t('rateHistory')}</Text>
-      <Text style={[styles.title, { color: theme.text }]}>{baseCurrency}/{quote}</Text>
+      <Text style={[styles.title, { color: theme.text }]}>{pairBase}/{pairQuote}</Text>
       <Text style={[styles.period, { color: theme.muted }]}>{t('oneMonth')}</Text>
 
       <Card>
