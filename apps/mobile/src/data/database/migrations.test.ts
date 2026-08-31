@@ -5,9 +5,11 @@ import { DATABASE_VERSION, migrateDatabase } from './migrations';
 function createDatabase(version = 0) {
   let userVersion = version;
   const appliedVersions: number[] = [];
+  const executedSql: string[] = [];
 
   const transaction = {
     execAsync: vi.fn(async (sql: string) => {
+      executedSql.push(sql);
       const match = sql.match(/PRAGMA user_version = (\d+)/);
       if (match) userVersion = Number(match[1]);
     }),
@@ -23,7 +25,7 @@ function createDatabase(version = 0) {
     withExclusiveTransactionAsync: vi.fn(async (task: (tx: typeof transaction) => Promise<void>) => task(transaction)),
   };
 
-  return { appliedVersions, database, getVersion: () => userVersion };
+  return { appliedVersions, database, executedSql, getVersion: () => userVersion };
 }
 
 describe('migrateDatabase', () => {
@@ -32,7 +34,7 @@ describe('migrateDatabase', () => {
 
     await migrateDatabase(state.database as never);
 
-    expect(state.appliedVersions).toEqual([1]);
+    expect(state.appliedVersions).toEqual([1, 2]);
     expect(state.getVersion()).toBe(DATABASE_VERSION);
   });
 
@@ -49,5 +51,21 @@ describe('migrateDatabase', () => {
     const state = createDatabase(DATABASE_VERSION + 1);
 
     await expect(migrateDatabase(state.database as never)).rejects.toThrow('newer than supported');
+  });
+
+  it('creates the complete offline-ledger schema in migration 2', async () => {
+    const state = createDatabase(1);
+
+    await migrateDatabase(state.database as never);
+
+    const schemaSql = state.executedSql.join('\n');
+    for (const table of ['households', 'household_members', 'accounts', 'categories', 'transactions', 'transaction_splits']) {
+      expect(schemaSql).toContain(`CREATE TABLE ${table}`);
+    }
+    expect(schemaSql).toContain("ownership_scope IN ('personal', 'shared')");
+    expect(schemaSql).toContain('amount_minor INTEGER NOT NULL');
+    expect(schemaSql).toContain('revision INTEGER NOT NULL DEFAULT 1');
+    expect(schemaSql).toContain('deleted_at TEXT');
+    expect(state.appliedVersions).toEqual([2]);
   });
 });

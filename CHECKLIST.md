@@ -77,8 +77,8 @@ Git-правило: агент не создаёт коммиты и не вып
 - [x] Не использовать `number` с дробной частью для хранения денег.
 - [x] Подключить Expo SQLite.
 - [x] Создать систему миграций локальной базы.
-- [ ] Создать таблицы household, members, accounts, categories, transactions и splits.
-- [ ] Добавить UUID, audit-поля, revision и soft delete.
+- [x] Создать таблицы household, members, accounts, categories, transactions и splits.
+- [x] Добавить UUID, audit-поля, revision и soft delete.
 - [ ] Создать repository-слой без прямого SQL в UI.
 - [ ] Создать начальные категории на трёх языках.
 - [ ] Добавить тесты денежных инвариантов и миграций. (Базовые денежные инварианты покрыты; миграции появятся вместе с SQLite.)
@@ -325,4 +325,4 @@ Git-правило: агент не создаёт коммиты и не вып
 
 ## Текущая следующая задача
 
-**Этап 2:** создать локальные таблицы household, members, accounts, categories, transactions и splits с audit-полями, revision и soft delete.
+**Этап 2:** создать repository-слой для локальной базы без прямого SQL в UI.
