@@ -47,3 +47,4 @@ Synchronized entities generally include UUID, household ID, created/updated time
 - Import fingerprint uniqueness is scoped to account/source, not globally.
 - Server access always checks active household membership.
 - Household and current-user balances are independently derived views: household balance includes each household-visible account once, while current-user balance includes only personal accounts owned by that user. A shared account is never silently counted as a user's personal balance.
+- Shared financial accounts are always explicit records with `ownership_scope = shared`; initialization and onboarding never create one implicitly. A household may contain any number of personal and shared accounts.
