@@ -13,6 +13,7 @@
 - Household profile, accounts, categories.
 - Manual expense, income, transfer, split transaction.
 - Transaction list/search and base dashboard.
+- Separate household-balance and current-user-balance queries and dashboard widgets, with explicit scope in downstream reports.
 - Unit tests for money and transfer rules.
 
 Exit: two people can use one device offline without losing accounting correctness.
@@ -57,4 +58,3 @@ Exit: repeat import does not create exact duplicates and uncertain matches remai
 - Accessibility, performance, security review, translations.
 - Development builds, store assets, privacy documentation.
 - Bank-specific PDF adapters only for agreed banks.
-

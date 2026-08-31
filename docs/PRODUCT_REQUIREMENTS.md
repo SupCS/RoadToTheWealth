@@ -97,6 +97,8 @@ A roadmap is an ordered/dependent set of goals, for example: repay expensive deb
 
 ## 10. Dashboard and reports
 
+- Household balance and current-user balance are separate financial scopes throughout the product, not merely two labels for the same total. Household balance aggregates all household-visible accounts once; current-user balance aggregates only accounts personally owned by that user. Shared accounts belong to the household balance and are not silently included in the personal balance.
+- The dashboard presents household balance and current-user balance as separate widgets. Reports, filters, budgets, goals, and derived totals must preserve the selected scope and label it explicitly.
 - Net worth, available cash, monthly income/expense, remaining budget, nearest goal, and recent activity.
 - Configurable exchange-rate widget showing the household base currency against globally enabled currencies.
 - Opening a currency pair shows its current value and historical movement; the initial view covers 30 days and may later support selectable periods.

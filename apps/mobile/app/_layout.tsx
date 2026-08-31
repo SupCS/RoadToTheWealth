@@ -1,6 +1,8 @@
 import { Stack } from 'expo-router';
+import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 
+import { DATABASE_NAME, migrateDatabase } from '@/src/data/database/migrations';
 import { SettingsProvider, useSettings } from '@/src/settings/settings-context';
 
 function RootNavigator() {
@@ -20,8 +22,10 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <SettingsProvider>
-      <RootNavigator />
-    </SettingsProvider>
+    <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDatabase}>
+      <SettingsProvider>
+        <RootNavigator />
+      </SettingsProvider>
+    </SQLiteProvider>
   );
 }
