@@ -49,6 +49,13 @@ type HouseholdRow = {
 
 type AccountSummaryRow = AccountRow & { current_balance_minor: string };
 
+type MemberRow = {
+  id: string; household_id: string; user_id: string | null; display_name: string;
+  role: HouseholdMember['role']; membership_status: HouseholdMember['membershipStatus'];
+  created_at: string; updated_at: string; created_by_member_id: string | null;
+  updated_by_member_id: string | null; revision: number; deleted_at: string | null;
+};
+
 type CategoryRow = {
   id: string;
   household_id: string | null;
@@ -135,6 +142,19 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     );
   }
 
+  async getActiveMember(householdId: string): Promise<HouseholdMember | null> {
+    const row = await this.db.getFirstAsync<MemberRow>(
+      `SELECT id, household_id, user_id, display_name, role, membership_status,
+        created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
+      FROM household_members
+      WHERE household_id = ? AND membership_status = 'active' AND deleted_at IS NULL
+      ORDER BY CASE role WHEN 'owner' THEN 0 ELSE 1 END, created_at
+      LIMIT 1`,
+      householdId,
+    );
+    return row ? mapMember(row) : null;
+  }
+
   async saveAccount(value: Account): Promise<void> {
     await this.db.runAsync(
       `INSERT INTO accounts (
@@ -160,6 +180,27 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       value.isArchived ? 1 : 0, value.createdAt, value.updatedAt, value.createdByMemberId,
       value.updatedByMemberId, value.revision, value.deletedAt,
     );
+  }
+
+  async getAccount(accountId: string): Promise<Account | null> {
+    const row = await this.db.getFirstAsync<AccountRow>(
+      `SELECT id, household_id, ownership_scope, owner_member_id, name, account_type,
+        CAST(opening_balance_minor AS TEXT) AS opening_balance_minor, currency_code,
+        is_archived, created_at, updated_at, created_by_member_id,
+        updated_by_member_id, revision, deleted_at
+      FROM accounts WHERE id = ? AND deleted_at IS NULL`,
+      accountId,
+    );
+    return row ? mapAccount(row) : null;
+  }
+
+  async setAccountArchived(accountId: string, archived: boolean, updatedAt: string, updatedByMemberId: string): Promise<void> {
+    const result = await this.db.runAsync(
+      `UPDATE accounts SET is_archived = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+      WHERE id = ? AND deleted_at IS NULL`,
+      archived ? 1 : 0, updatedAt, updatedByMemberId, accountId,
+    );
+    if (result.changes !== 1) throw new Error('Account not found');
   }
 
   async listAccounts(householdId: string): Promise<Account[]> {
@@ -341,6 +382,15 @@ function mapCategory(row: CategoryRow): Category {
     updatedByMemberId: row.updated_by_member_id,
     revision: row.revision,
     deletedAt: row.deleted_at,
+  };
+}
+
+function mapMember(row: MemberRow): HouseholdMember {
+  return {
+    id: row.id, householdId: row.household_id, userId: row.user_id, displayName: row.display_name,
+    role: row.role, membershipStatus: row.membership_status, createdAt: row.created_at,
+    updatedAt: row.updated_at, createdByMemberId: row.created_by_member_id,
+    updatedByMemberId: row.updated_by_member_id, revision: row.revision, deletedAt: row.deleted_at,
   };
 }
 

@@ -68,6 +68,15 @@ export function deserializeMoney(value: { amountMinor: string; currency: MoneyCu
   return money(BigInt(value.amountMinor), value.currency);
 }
 
+export function toMajorAmountInput(value: Money): string {
+  const precision = getMinorUnit(value.currency);
+  if (precision === 0) return value.amountMinor.toString();
+  const sign = value.amountMinor < 0n ? '-' : '';
+  const absolute = value.amountMinor < 0n ? -value.amountMinor : value.amountMinor;
+  const digits = absolute.toString().padStart(precision + 1, '0');
+  return `${sign}${digits.slice(0, -precision)}.${digits.slice(-precision)}`;
+}
+
 export function formatMoney(value: Money, locale: string) {
   const precision = getMinorUnit(value.currency);
   const scale = 10 ** precision;

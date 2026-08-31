@@ -1,10 +1,10 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, EmptyState, ErrorState, LoadingState, MoneyText, Screen, ScreenHeader } from '@/src/design/layout';
+import { Card, EmptyState, ErrorState, LoadingState, MoneyText, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import type { AccountSummary } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
@@ -33,9 +33,9 @@ export default function AccountsScreen() {
     }
   }, [repository]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     void load();
-  }, [load]);
+  }, [load]));
 
   return (
     <Screen>
@@ -44,6 +44,7 @@ export default function AccountsScreen() {
         <Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text>
       </Pressable>
       <ScreenHeader title={t('accounts')} />
+      <PrimaryButton label={t('addAccount')} onPress={() => router.push('/accounts/new' as Href)} />
 
       {state.status === 'loading' ? <LoadingState label={t('loadingAccounts')} /> : null}
       {state.status === 'error' ? (
@@ -57,7 +58,12 @@ export default function AccountsScreen() {
         />
       ) : null}
       {state.status === 'ready' ? state.accounts.map(({ account, currentBalance }) => (
-        <View key={account.id} style={styles.accountCard}>
+        <Pressable
+          accessibilityRole="button"
+          key={account.id}
+          onPress={() => router.push(`/accounts/${account.id}` as Href)}
+          style={({ pressed }) => [styles.accountCard, { opacity: pressed ? 0.75 : 1 }]}
+        >
           <Card>
             <View style={styles.accountRow}>
               <View style={styles.accountIdentity}>
@@ -76,7 +82,7 @@ export default function AccountsScreen() {
             </View>
             {account.isArchived ? <Text style={[styles.archived, { color: theme.muted }]}>{t('archived')}</Text> : null}
           </Card>
-        </View>
+        </Pressable>
       )) : null}
     </Screen>
   );

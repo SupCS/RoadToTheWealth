@@ -87,7 +87,10 @@ export interface LedgerRepository {
   saveHousehold(household: Household): Promise<void>;
   getActiveHousehold(): Promise<Household | null>;
   saveMember(member: HouseholdMember): Promise<void>;
+  getActiveMember(householdId: string): Promise<HouseholdMember | null>;
   saveAccount(account: Account): Promise<void>;
+  getAccount(accountId: string): Promise<Account | null>;
+  setAccountArchived(accountId: string, archived: boolean, updatedAt: string, updatedByMemberId: string): Promise<void>;
   listAccounts(householdId: string): Promise<Account[]>;
   listAccountSummaries(householdId: string): Promise<AccountSummary[]>;
   getBalances(scope: BalanceScope): Promise<Money[]>;

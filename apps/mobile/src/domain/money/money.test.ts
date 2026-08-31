@@ -11,9 +11,15 @@ import {
   parseMajorAmount,
   serializeMoney,
   subtract,
+  toMajorAmountInput,
 } from './money';
 
 describe('money', () => {
+  it('formats editable major units without floating-point conversion', () => {
+    expect(toMajorAmountInput(money(12_305n, 'USD'))).toBe('123.05');
+    expect(toMajorAmountInput(money(-5n, 'USD'))).toBe('-0.05');
+  });
+
   it('parses major units without floating-point arithmetic', () => {
     expect(parseMajorAmount('10.10', 'GEL')).toEqual(money(1010n, 'GEL'));
     expect(parseMajorAmount('10,01', 'EUR')).toEqual(money(1001n, 'EUR'));
