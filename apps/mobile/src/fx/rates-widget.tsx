@@ -1,8 +1,8 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, layoutStyles } from '@/src/design/layout';
+import { Card, ErrorState, layoutStyles, LoadingState } from '@/src/design/layout';
 import { useLatestRates } from '@/src/fx/use-fx';
 import { useSettings } from '@/src/settings/settings-context';
 
@@ -16,7 +16,7 @@ export function RatesWidget() {
     t,
     theme,
   } = useSettings();
-  const { error, fetchedAt, loading, rates } = useLatestRates(baseCurrency, enabledCurrencies);
+  const { error, fetchedAt, loading, rates, refresh } = useLatestRates(baseCurrency, enabledCurrencies);
 
   return (
     <View>
@@ -25,8 +25,8 @@ export function RatesWidget() {
         <MaterialCommunityIcons color={theme.primary} name="chart-line" size={22} />
       </View>
       <Card>
-        {loading ? <ActivityIndicator color={theme.primary} /> : null}
-        {!loading && error && rates.length === 0 ? <Text style={[styles.message, { color: theme.muted }]}>{t('ratesUnavailable')}</Text> : null}
+        {loading ? <LoadingState label={t('loading')} /> : null}
+        {!loading && error && rates.length === 0 ? <ErrorState message={t('ratesUnavailable')} onRetry={() => void refresh()} retryLabel={t('retry')} /> : null}
         {!loading && !error && enabledCurrencies.filter((code) => code !== baseCurrency).length === 0 ? <Text style={[styles.message, { color: theme.muted }]}>{t('noCurrencies')}</Text> : null}
         {rates.map((item, index) => {
           const inverted = isPairInverted(baseCurrency, item.quote as typeof baseCurrency);

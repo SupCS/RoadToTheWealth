@@ -3,6 +3,7 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSettings } from '@/src/settings/settings-context';
+import { controlSizes, fontSizes, fontWeights, spacing } from '@/src/design/tokens';
 
 export default function TabLayout() {
   const { t, theme } = useSettings();
@@ -17,11 +18,11 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
-          height: 58 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 6,
+          height: controlSizes.tabBarContent + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, spacing.sm),
+          paddingTop: spacing.sm,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
       }}
     >
       <Tabs.Screen name="index" options={{ title: t('home'), tabBarIcon: ({ color, size }) => <MaterialCommunityIcons color={color} name="home-variant-outline" size={size} /> }} />

@@ -42,6 +42,8 @@ export const messages = {
     oneMonth: 'Last 30 days',
     back: 'Back',
     invertRates: 'Swap rate direction',
+    loading: 'Loading…',
+    retry: 'Try again',
   },
   uk: {
     home: 'Головна',
@@ -78,6 +80,8 @@ export const messages = {
     oneMonth: 'Останні 30 днів',
     back: 'Назад',
     invertRates: 'Поміняти напрямок курсу',
+    loading: 'Завантаження…',
+    retry: 'Спробувати ще раз',
   },
   ru: {
     home: 'Главная',
@@ -114,5 +118,7 @@ export const messages = {
     oneMonth: 'Последние 30 дней',
     back: 'Назад',
     invertRates: 'Поменять направление курса',
+    loading: 'Загрузка…',
+    retry: 'Попробовать снова',
   },
 } satisfies Record<Locale, Record<string, string>>;

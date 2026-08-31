@@ -1,8 +1,11 @@
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { PropsWithChildren, ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextInputProps, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useSettings } from '@/src/settings/settings-context';
+import { fontSizes, fontWeights, lineHeights, radii, spacing } from '@/src/design/tokens';
+import { formatMoney, type Money } from '@/src/domain/money/money';
 
 export function Screen({ children }: PropsWithChildren) {
   const { theme } = useSettings();
@@ -52,24 +55,110 @@ export function PrimaryButton({ label, onPress }: { label: string; onPress?: () 
   );
 }
 
+type AppTextFieldProps = TextInputProps & {
+  error?: string;
+  label: string;
+};
+
+export function AppTextField({ error, label, style, ...props }: AppTextFieldProps) {
+  const { theme } = useSettings();
+  const borderColor = error ? theme.danger : theme.border;
+  return (
+    <View style={styles.fieldGroup}>
+      <Text style={[styles.fieldLabel, { color: theme.text }]}>{label}</Text>
+      <TextInput
+        accessibilityLabel={label}
+        placeholderTextColor={theme.muted}
+        style={[styles.field, { backgroundColor: theme.surface, borderColor, color: theme.text }, style]}
+        {...props}
+      />
+      {error ? <Text style={[styles.fieldError, { color: theme.danger }]}>{error}</Text> : null}
+    </View>
+  );
+}
+
+export function MoneyText({
+  locale,
+  tone = 'default',
+  value,
+  variant = 'body',
+}: {
+  locale: string;
+  tone?: 'danger' | 'default' | 'positive';
+  value: Money;
+  variant?: 'body' | 'display' | 'metric';
+}) {
+  const { theme } = useSettings();
+  const color = tone === 'danger' ? theme.danger : tone === 'positive' ? theme.positive : theme.text;
+  return (
+    <Text
+      accessibilityLabel={formatMoney(value, locale)}
+      style={[
+        styles.money,
+        variant === 'display' && styles.moneyDisplay,
+        variant === 'metric' && styles.moneyMetric,
+        { color },
+      ]}
+    >
+      {formatMoney(value, locale)}
+    </Text>
+  );
+}
+
+export function LoadingState({ label }: { label?: string }) {
+  const { theme } = useSettings();
+  return (
+    <View accessibilityLabel={label} accessibilityRole="progressbar" style={styles.state}>
+      <ActivityIndicator color={theme.primary} size="small" />
+      {label ? <Text style={[styles.stateText, { color: theme.muted }]}>{label}</Text> : null}
+    </View>
+  );
+}
+
+export function ErrorState({ message, onRetry, retryLabel }: { message: string; onRetry?: () => void; retryLabel?: string }) {
+  const { theme } = useSettings();
+  return (
+    <View accessibilityLiveRegion="polite" style={styles.state}>
+      <MaterialCommunityIcons color={theme.danger} name="alert-circle-outline" size={30} />
+      <Text style={[styles.stateText, { color: theme.muted }]}>{message}</Text>
+      {onRetry && retryLabel ? (
+        <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => [styles.retry, { borderColor: theme.primary, opacity: pressed ? 0.7 : 1 }]}>
+          <Text style={[styles.retryText, { color: theme.primary }]}>{retryLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export const layoutStyles = StyleSheet.create({
-  body: { fontSize: 15, lineHeight: 22 },
-  eyebrow: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase' },
-  metric: { fontSize: 18, fontWeight: '800' },
+  body: { fontSize: fontSizes.body, lineHeight: lineHeights.body },
+  eyebrow: { fontSize: fontSizes.label, fontWeight: fontWeights.extraBold, letterSpacing: 1.5, textTransform: 'uppercase' },
+  metric: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12, marginTop: 24 },
+  sectionTitle: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold, marginBottom: spacing.md, marginTop: spacing.xxl },
 });
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  screen: { flexGrow: 1, paddingBottom: 40, paddingHorizontal: 20, paddingTop: 18 },
-  header: { marginBottom: 22 },
-  eyebrow: { fontSize: 13, fontWeight: '900', letterSpacing: 3, marginBottom: 5 },
-  title: { fontSize: 30, fontWeight: '800', letterSpacing: -0.9 },
-  card: { borderRadius: 22, borderWidth: 1, padding: 20 },
-  emptyIcon: { alignItems: 'center', marginBottom: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center' },
-  body: { fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  button: { alignItems: 'center', borderRadius: 16, marginTop: 18, paddingHorizontal: 18, paddingVertical: 15 },
-  buttonText: { fontSize: 16, fontWeight: '800' },
+  screen: { flexGrow: 1, paddingBottom: spacing.huge, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  header: { marginBottom: spacing.xxl },
+  eyebrow: { fontSize: 13, fontWeight: fontWeights.black, letterSpacing: 3, marginBottom: spacing.xs },
+  title: { fontSize: fontSizes.title, fontWeight: fontWeights.extraBold, letterSpacing: -0.9, lineHeight: lineHeights.title },
+  card: { borderRadius: radii.xl, borderWidth: 1, padding: spacing.xl },
+  emptyIcon: { alignItems: 'center', marginBottom: spacing.md },
+  emptyTitle: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold, marginBottom: spacing.sm, textAlign: 'center' },
+  body: { fontSize: fontSizes.body, lineHeight: lineHeights.body, textAlign: 'center' },
+  button: { alignItems: 'center', borderRadius: radii.lg, marginTop: spacing.xl, minHeight: 48, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  buttonText: { fontSize: fontSizes.button, fontWeight: fontWeights.extraBold },
+  fieldGroup: { gap: spacing.sm, marginBottom: spacing.lg },
+  fieldLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  field: { borderRadius: radii.lg, borderWidth: 1, fontSize: fontSizes.body, minHeight: 50, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  fieldError: { fontSize: fontSizes.label, lineHeight: lineHeights.caption },
+  money: { fontSize: fontSizes.body, fontVariant: ['tabular-nums'], fontWeight: fontWeights.bold },
+  moneyDisplay: { fontSize: fontSizes.display, fontWeight: fontWeights.extraBold, letterSpacing: -1.2, lineHeight: lineHeights.display },
+  moneyMetric: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold, lineHeight: lineHeights.subtitle },
+  state: { alignItems: 'center', gap: spacing.md, justifyContent: 'center', minHeight: 96, padding: spacing.lg },
+  stateText: { fontSize: fontSizes.body, lineHeight: lineHeights.body, textAlign: 'center' },
+  retry: { borderRadius: radii.md, borderWidth: 1, minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  retryText: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
 });
