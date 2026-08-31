@@ -26,6 +26,7 @@ These instructions apply to the entire repository. A more specific `AGENTS.md` m
 
 ## Change discipline
 
+- Never create a Git commit or push changes unless the user explicitly asks to commit or push in the current request.
 - Read the relevant file in `docs/` before changing domain behavior.
 - Update documentation and tests in the same change as a requirement or schema change.
 - Prefer small modules organized by domain, not a global folder of unrelated helpers.

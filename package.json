@@ -6,10 +6,9 @@
     "mobile": "npm --prefix apps/mobile start",
     "mobile:clear": "npm --prefix apps/mobile run start:clear",
     "api": "npm --prefix apps/api run dev",
-    "check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/api run typecheck"
+    "check": "npm --prefix apps/mobile run typecheck && npm --prefix apps/mobile run test && npm --prefix apps/api run typecheck"
   },
   "engines": {
     "node": ">=22.13"
   }
 }
-
