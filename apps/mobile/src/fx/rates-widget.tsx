@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, ErrorState, layoutStyles, LoadingState } from '@/src/design/layout';
 import { useLatestRates } from '@/src/fx/use-fx';
+import { formatDate, formatDateTime, formatRate } from '@/src/i18n/formatters';
 import { useSettings } from '@/src/settings/settings-context';
 
 export function RatesWidget() {
@@ -39,17 +40,17 @@ export function RatesWidget() {
           >
             <View>
               <Text style={[styles.pair, { color: theme.text }]}>{inverted ? `${item.quote}/${item.base}` : `${item.base}/${item.quote}`}</Text>
-              <Text style={[styles.date, { color: theme.muted }]}>{item.date}</Text>
+              <Text style={[styles.date, { color: theme.muted }]}>{formatDate(item.date, locale)}</Text>
             </View>
             <View style={styles.valueRow}>
-              <Text style={[styles.value, { color: theme.text }]}>{(inverted ? 1 / item.rate : item.rate).toLocaleString(locale, { maximumFractionDigits: 5 })}</Text>
+              <Text style={[styles.value, { color: theme.text }]}>{formatRate(inverted ? 1 / item.rate : item.rate, locale)}</Text>
               <MaterialCommunityIcons color={theme.muted} name="chevron-right" size={20} />
             </View>
             </Pressable>
           );
         })}
         {rates.length > 0 ? <Text style={[styles.hint, { color: theme.muted }]}>{t('ratesHint')}</Text> : null}
-        {fetchedAt ? <Text style={[styles.updated, { color: theme.muted }]}>{t('updated')}: {new Date(fetchedAt).toLocaleString(locale)}</Text> : null}
+        {fetchedAt ? <Text style={[styles.updated, { color: theme.muted }]}>{t('updated')}: {formatDateTime(fetchedAt, locale)}</Text> : null}
       </Card>
     </View>
   );

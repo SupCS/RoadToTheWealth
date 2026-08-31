@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { Card, Screen } from '@/src/design/layout';
 import { useRateHistory } from '@/src/fx/use-fx';
+import { formatDate, formatRate } from '@/src/i18n/formatters';
 import { currencyCatalog, type CurrencyCode, useSettings } from '@/src/settings/settings-context';
 
 function isCurrencyCode(value: string): value is CurrencyCode {
@@ -50,7 +51,7 @@ export default function RateHistoryScreen() {
         {error ? <Text style={[styles.error, { color: theme.danger }]}>{t('ratesUnavailable')}</Text> : null}
         {latest ? (
           <>
-            <Text style={[styles.latest, { color: theme.text }]}>{latest.rate.toLocaleString(locale, { maximumFractionDigits: 5 })}</Text>
+            <Text style={[styles.latest, { color: theme.text }]}>{formatRate(latest.rate, locale)}</Text>
             <View style={styles.chart}>
               {rates.map((item) => {
                 const height = 24 + ((item.rate - min) / span) * 96;
@@ -58,12 +59,12 @@ export default function RateHistoryScreen() {
               })}
             </View>
             <View style={styles.rangeRow}>
-              <Text style={[styles.range, { color: theme.muted }]}>{rates[0]?.date}</Text>
-              <Text style={[styles.range, { color: theme.muted }]}>{latest.date}</Text>
+              <Text style={[styles.range, { color: theme.muted }]}>{rates[0] ? formatDate(rates[0].date, locale) : ''}</Text>
+              <Text style={[styles.range, { color: theme.muted }]}>{formatDate(latest.date, locale)}</Text>
             </View>
             <View style={[styles.stats, { borderTopColor: theme.border }]}>
-              <Text style={[styles.stat, { color: theme.muted }]}>Min: {min.toLocaleString(locale, { maximumFractionDigits: 5 })}</Text>
-              <Text style={[styles.stat, { color: theme.muted }]}>Max: {max.toLocaleString(locale, { maximumFractionDigits: 5 })}</Text>
+              <Text style={[styles.stat, { color: theme.muted }]}>{t('minimum')}: {formatRate(min, locale)}</Text>
+              <Text style={[styles.stat, { color: theme.muted }]}>{t('maximum')}: {formatRate(max, locale)}</Text>
             </View>
           </>
         ) : null}

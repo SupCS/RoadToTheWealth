@@ -1,6 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useWindowDimensions } from 'react-native';
 
 import { useSettings } from '@/src/settings/settings-context';
 import { controlSizes, fontSizes, fontWeights, spacing } from '@/src/design/tokens';
@@ -8,6 +9,8 @@ import { controlSizes, fontSizes, fontWeights, spacing } from '@/src/design/toke
 export default function TabLayout() {
   const { t, theme } = useSettings();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const scaledTabHeight = controlSizes.tabBarContent + Math.max(0, fontScale - 1) * 24;
 
   return (
     <Tabs
@@ -18,11 +21,12 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
-          height: controlSizes.tabBarContent + insets.bottom,
+          height: scaledTabHeight + insets.bottom,
           paddingBottom: Math.max(insets.bottom, spacing.sm),
           paddingTop: spacing.sm,
         },
         tabBarLabelStyle: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
+        tabBarAllowFontScaling: true,
       }}
     >
       <Tabs.Screen name="index" options={{ title: t('home'), tabBarIcon: ({ color, size }) => <MaterialCommunityIcons color={color} name="home-variant-outline" size={size} /> }} />

@@ -57,7 +57,7 @@ export default function SettingsScreen() {
           >
             <View style={[styles.swatch, { backgroundColor: item.primary }]} />
             <View style={[styles.swatch, { backgroundColor: item.accent }]} />
-            <Text numberOfLines={1} style={[styles.themeName, { color: item.text }]}>{item.name}</Text>
+            <Text style={[styles.themeName, { color: item.text }]}>{item.name}</Text>
           </Pressable>
         ))}
       </View>
@@ -73,7 +73,7 @@ export default function SettingsScreen() {
             onPress={() => setBaseCurrency(currency)}
             style={[styles.codePill, { backgroundColor: baseCurrency === currency ? theme.primary : theme.surface, borderColor: baseCurrency === currency ? theme.primary : theme.border }]}
           >
-            <Text style={[styles.codeText, { color: baseCurrency === currency && theme.id !== 'contrast' ? '#FFFFFF' : theme.text }]}>{currency}</Text>
+            <Text style={[styles.codeText, { color: baseCurrency === currency ? theme.onPrimary : theme.text }]}>{currency}</Text>
           </Pressable>
         ))}
       </View>

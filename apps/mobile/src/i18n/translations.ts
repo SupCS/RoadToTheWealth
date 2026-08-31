@@ -44,6 +44,8 @@ export const messages = {
     invertRates: 'Swap rate direction',
     loading: 'Loading…',
     retry: 'Try again',
+    minimum: 'Min',
+    maximum: 'Max',
   },
   uk: {
     home: 'Головна',
@@ -82,6 +84,8 @@ export const messages = {
     invertRates: 'Поміняти напрямок курсу',
     loading: 'Завантаження…',
     retry: 'Спробувати ще раз',
+    minimum: 'Мін.',
+    maximum: 'Макс.',
   },
   ru: {
     home: 'Главная',
@@ -120,5 +124,7 @@ export const messages = {
     invertRates: 'Поменять направление курса',
     loading: 'Загрузка…',
     retry: 'Попробовать снова',
+    minimum: 'Мин.',
+    maximum: 'Макс.',
   },
 } satisfies Record<Locale, Record<string, string>>;

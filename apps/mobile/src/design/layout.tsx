@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '@/src/settings/settings-context';
 import { fontSizes, fontWeights, lineHeights, radii, spacing } from '@/src/design/tokens';
 import { formatMoney, type Money } from '@/src/domain/money/money';
+import { getIntlLocale } from '@/src/i18n/formatters';
+import type { Locale } from '@/src/i18n/translations';
 
 export function Screen({ children }: PropsWithChildren) {
   const { theme } = useSettings();
@@ -50,7 +52,7 @@ export function PrimaryButton({ label, onPress }: { label: string; onPress?: () 
       onPress={onPress}
       style={({ pressed }) => [styles.button, { backgroundColor: theme.primary, opacity: pressed ? 0.82 : 1 }]}
     >
-      <Text style={[styles.buttonText, { color: theme.id === 'contrast' ? '#000000' : '#FFFFFF' }]}>{label}</Text>
+      <Text style={[styles.buttonText, { color: theme.onPrimary }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -68,6 +70,7 @@ export function AppTextField({ error, label, style, ...props }: AppTextFieldProp
       <Text style={[styles.fieldLabel, { color: theme.text }]}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
+        allowFontScaling
         placeholderTextColor={theme.muted}
         style={[styles.field, { backgroundColor: theme.surface, borderColor, color: theme.text }, style]}
         {...props}
@@ -83,16 +86,17 @@ export function MoneyText({
   value,
   variant = 'body',
 }: {
-  locale: string;
+  locale: Locale;
   tone?: 'danger' | 'default' | 'positive';
   value: Money;
   variant?: 'body' | 'display' | 'metric';
 }) {
   const { theme } = useSettings();
   const color = tone === 'danger' ? theme.danger : tone === 'positive' ? theme.positive : theme.text;
+  const formatted = formatMoney(value, getIntlLocale(locale));
   return (
     <Text
-      accessibilityLabel={formatMoney(value, locale)}
+      accessibilityLabel={formatted}
       style={[
         styles.money,
         variant === 'display' && styles.moneyDisplay,
@@ -100,7 +104,7 @@ export function MoneyText({
         { color },
       ]}
     >
-      {formatMoney(value, locale)}
+      {formatted}
     </Text>
   );
 }
