@@ -4,7 +4,8 @@ import type { ComponentProps } from 'react';
 import type { AppTheme } from '../../design/themes';
 
 export type CategoryIconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
-export type CategoryColorToken = 'primary' | 'accent' | 'positive' | 'warning' | 'danger' | 'text' | 'muted';
+export type CategoryColorValue = `#${string}`;
+type CategoryColorLabelKey = 'categoryColorEmerald' | 'categoryColorBlue' | 'categoryColorCyan' | 'categoryColorViolet' | 'categoryColorPurple' | 'categoryColorPink' | 'categoryColorRed' | 'categoryColorOrange' | 'categoryColorAmber' | 'categoryColorLime' | 'categoryColorBrown' | 'categoryColorSlate';
 
 type CategoryIconSetKey = 'categoryIconSetMoney' | 'categoryIconSetHome' | 'categoryIconSetFood' | 'categoryIconSetTravel' | 'categoryIconSetLife';
 
@@ -16,14 +17,27 @@ export const categoryIconSets: ReadonlyArray<Readonly<{ key: CategoryIconSetKey;
   { key: 'categoryIconSetLife', icons: ['medical-bag', 'heart-pulse', 'dumbbell', 'school', 'book-open-variant', 'movie-open', 'gamepad-variant', 'music', 'paw', 'baby-face-outline', 'tshirt-crew', 'cellphone'] },
 ];
 
-export const categoryColorTokens: readonly CategoryColorToken[] = ['primary', 'accent', 'positive', 'warning', 'danger', 'text', 'muted'];
-export const categoryColorLabelKeys = {
-  primary: 'categoryColor_primary', accent: 'categoryColor_accent', positive: 'categoryColor_positive',
-  warning: 'categoryColor_warning', danger: 'categoryColor_danger', text: 'categoryColor_text', muted: 'categoryColor_muted',
-} as const;
+export const categoryColorOptions: ReadonlyArray<Readonly<{ labelKey: CategoryColorLabelKey; value: CategoryColorValue }>> = [
+  { labelKey: 'categoryColorEmerald', value: '#168A65' }, { labelKey: 'categoryColorBlue', value: '#2878C8' },
+  { labelKey: 'categoryColorCyan', value: '#168AA3' }, { labelKey: 'categoryColorViolet', value: '#6D5BD0' },
+  { labelKey: 'categoryColorPurple', value: '#8B4FB3' }, { labelKey: 'categoryColorPink', value: '#C94F83' },
+  { labelKey: 'categoryColorRed', value: '#C74747' }, { labelKey: 'categoryColorOrange', value: '#D66A2C' },
+  { labelKey: 'categoryColorAmber', value: '#C58B16' }, { labelKey: 'categoryColorLime', value: '#668F2D' },
+  { labelKey: 'categoryColorBrown', value: '#815B45' }, { labelKey: 'categoryColorSlate', value: '#596579' },
+];
 
-export function resolveCategoryColor(theme: AppTheme, token: string | null): string {
-  return categoryColorTokens.includes(token as CategoryColorToken) ? theme[token as CategoryColorToken] : theme.primary;
+export const categoryIconColorOptions: readonly CategoryColorValue[] = [
+  '#FFFFFF', '#111827', ...categoryColorOptions.map((option) => option.value),
+];
+
+const legacyThemeColors: Readonly<Record<string, CategoryColorValue>> = {
+  primary: '#168A65', accent: '#C58B16', positive: '#668F2D', warning: '#D66A2C',
+  danger: '#C74747', text: '#596579', muted: '#6D5BD0',
+};
+
+export function resolveCategoryColor(_theme: AppTheme, storedColor: string | null): CategoryColorValue {
+  if (storedColor && /^#[0-9a-f]{6}$/i.test(storedColor)) return storedColor as CategoryColorValue;
+  return legacyThemeColors[storedColor ?? ''] ?? categoryColorOptions[0]!.value;
 }
 
 const legacyIconNames: Readonly<Record<string, CategoryIconName>> = {
@@ -38,9 +52,10 @@ export function resolveCategoryIcon(icon: string | null): CategoryIconName {
   return legacyIconNames[icon] ?? icon as CategoryIconName;
 }
 
-export function resolveCategoryForeground(theme: AppTheme, token: string | null): string {
-  const background = resolveCategoryColor(theme, token);
-  return contrastRatio(theme.text, background) >= contrastRatio(theme.onPrimary, background) ? theme.text : theme.onPrimary;
+export function resolveCategoryForeground(theme: AppTheme, storedColor: string | null, storedIconColor?: string | null): CategoryColorValue {
+  if (storedIconColor && /^#[0-9a-f]{6}$/i.test(storedIconColor)) return storedIconColor as CategoryColorValue;
+  const background = resolveCategoryColor(theme, storedColor);
+  return contrastRatio('#111827', background) >= contrastRatio('#FFFFFF', background) ? '#111827' : '#FFFFFF';
 }
 
 function contrastRatio(first: string, second: string): number {

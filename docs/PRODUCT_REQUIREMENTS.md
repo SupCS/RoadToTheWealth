@@ -83,7 +83,8 @@ Users can create deterministic merchant/category rules. Rules run locally and ar
 
 ## 8. Categories, budgets, and recurring items
 
-- Built-in localized income and expense categories; custom categories/subcategories require one user-entered name and support selectable themed colors and icons, plus archive and merge.
+- Built-in localized income and expense categories; custom categories/subcategories require one user-entered name and support independently selectable fixed background colors, icon colors, and icons, plus archive and merge. Category appearance remains unchanged when the app theme changes. Built-in categories keep their localized names and behavior but allow appearance editing.
+- Subcategories are analytical detail, not independent top-level reporting groups: dashboards roll their amounts into the parent category and let the user expand that parent for a subcategory breakdown. Direct parent spending appears as `General` in that breakdown. Pickers, filters, transaction rows, and category management preserve and display the parent-child relationship.
 - Monthly household, member, and category budgets.
 - Optional rollover and alerts at configurable thresholds.
 - Recurring salary, rent, utilities, subscriptions, loans, and savings transfers.

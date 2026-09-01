@@ -70,6 +70,7 @@ type CategoryRow = {
   name_ru: string;
   icon: string | null;
   color_token: string | null;
+  icon_color: string | null;
   is_archived: number;
   created_at: string;
   updated_at: string;
@@ -318,9 +319,9 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     await this.db.runAsync(
       `INSERT INTO categories (
         id, household_id, parent_id, applicability, system_key, name_en, name_uk, name_ru,
-        icon, color_token, is_archived, created_at, updated_at, created_by_member_id,
+        icon, color_token, icon_color, is_archived, created_at, updated_at, created_by_member_id,
         updated_by_member_id, revision, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         parent_id = excluded.parent_id,
         applicability = excluded.applicability,
@@ -329,6 +330,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         name_ru = excluded.name_ru,
         icon = excluded.icon,
         color_token = excluded.color_token,
+        icon_color = excluded.icon_color,
         is_archived = excluded.is_archived,
         updated_at = excluded.updated_at,
         updated_by_member_id = excluded.updated_by_member_id,
@@ -336,7 +338,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         deleted_at = excluded.deleted_at
       WHERE excluded.revision > categories.revision`,
       value.id, value.householdId, value.parentId, value.applicability, value.systemKey,
-      value.names.en, value.names.uk, value.names.ru, value.icon, value.colorToken,
+      value.names.en, value.names.uk, value.names.ru, value.icon, value.colorToken, value.iconColor,
       value.isArchived ? 1 : 0, value.createdAt, value.updatedAt, value.createdByMemberId,
       value.updatedByMemberId, value.revision, value.deletedAt,
     );
@@ -353,7 +355,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
   async listCategories(householdId: string): Promise<Category[]> {
     const rows = await this.db.getAllAsync<CategoryRow>(
       `SELECT id, household_id, parent_id, applicability, system_key, name_en, name_uk, name_ru,
-        icon, color_token, is_archived, created_at, updated_at, created_by_member_id,
+        icon, color_token, icon_color, is_archived, created_at, updated_at, created_by_member_id,
         updated_by_member_id, revision, deleted_at
       FROM categories
       WHERE (household_id = ? OR household_id IS NULL) AND deleted_at IS NULL
@@ -366,7 +368,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
   async getCategory(categoryId: string): Promise<Category | null> {
     const row = await this.db.getFirstAsync<CategoryRow>(
       `SELECT id, household_id, parent_id, applicability, system_key, name_en, name_uk, name_ru,
-        icon, color_token, is_archived, created_at, updated_at, created_by_member_id,
+        icon, color_token, icon_color, is_archived, created_at, updated_at, created_by_member_id,
         updated_by_member_id, revision, deleted_at
       FROM categories WHERE id = ? AND deleted_at IS NULL`, categoryId,
     );
@@ -624,6 +626,7 @@ function mapCategory(row: CategoryRow): Category {
     names: { en: row.name_en, uk: row.name_uk, ru: row.name_ru },
     icon: row.icon,
     colorToken: row.color_token,
+    iconColor: row.icon_color,
     isArchived: row.is_archived === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

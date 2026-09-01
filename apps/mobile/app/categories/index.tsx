@@ -40,21 +40,28 @@ export default function CategoriesScreen() {
     {state.status === 'loading' ? <LoadingState label={t('loadingCategories')} /> : null}
     {state.status === 'error' ? <Card><ErrorState message={t('categoriesLoadError')} onRetry={() => void load()} retryLabel={t('retry')} /></Card> : null}
     {state.status === 'ready' && state.categories.length === 0 ? <EmptyState description={t('noCategoriesHint')} icon={<MaterialCommunityIcons color={theme.primary} name="shape-outline" size={46} />} title={t('noCategories')} /> : null}
-    {state.status === 'ready' ? state.categories.map((category) => {
+    {state.status === 'ready' ? orderCategories(state.categories).map((category) => {
       const parent = category.parentId ? state.categories.find((candidate) => candidate.id === category.parentId) : null;
       const editable = category.householdId !== null && category.systemKey === null;
-      return <Pressable disabled={!editable} key={category.id} onPress={() => router.push(`/categories/${category.id}` as Href)} style={({ pressed }) => [styles.category, { opacity: pressed ? 0.74 : category.isArchived ? 0.55 : 1 }]}>
+      return <Pressable disabled={category.isArchived} key={category.id} onPress={() => router.push(`/categories/${category.id}` as Href)} style={({ pressed }) => [styles.category, category.parentId ? styles.subcategory : null, { opacity: pressed ? 0.74 : category.isArchived ? 0.55 : 1 }]}>
         <Card><View style={styles.row}>
-          <View style={[styles.categoryIcon, { backgroundColor: resolveCategoryColor(theme, category.colorToken) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category.colorToken)} name={resolveCategoryIcon(category.icon)} size={24} /></View>
+          {parent ? <MaterialCommunityIcons color={theme.muted} name="subdirectory-arrow-right" size={20} /> : null}
+          <View style={[styles.categoryIcon, { backgroundColor: resolveCategoryColor(theme, category.colorToken) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category.colorToken, category.iconColor)} name={resolveCategoryIcon(category.icon)} size={24} /></View>
           <View style={styles.text}>
-            <Text style={[styles.name, { color: theme.text }]}>{parent ? `${parent.names[locale]} › ` : ''}{category.names[locale]}</Text>
-            <Text style={[styles.meta, { color: theme.muted }]}>{t(categoryApplicabilityKey[category.applicability])}{' · '}{editable ? t('customCategory') : t('builtInCategory')}{category.isArchived ? ` · ${t('archived')}` : ''}</Text>
+            <Text style={[styles.name, { color: theme.text }]}>{category.names[locale]}</Text>
+            <Text style={[styles.meta, { color: theme.muted }]}>{parent ? `${t('subcategory')} · ${parent.names[locale]} · ` : ''}{t(categoryApplicabilityKey[category.applicability])}{' · '}{editable ? t('customCategory') : t('builtInCategory')}{category.isArchived ? ` · ${t('archived')}` : ''}</Text>
           </View>
-          {editable ? <MaterialCommunityIcons color={theme.primary} name="chevron-right" size={24} /> : null}
+          {!category.isArchived ? <MaterialCommunityIcons color={theme.primary} name="chevron-right" size={24} /> : null}
         </View></Card>
       </Pressable>;
     }) : null}
   </Screen>;
+}
+
+function orderCategories(categories: Category[]): Category[] {
+  const roots = categories.filter((category) => category.parentId === null);
+  const ordered = roots.flatMap((root) => [root, ...categories.filter((category) => category.parentId === root.id)]);
+  return [...ordered, ...categories.filter((category) => !ordered.some((candidate) => candidate.id === category.id))];
 }
 
 const categoryApplicabilityKey = { expense: 'expense', income: 'income', both: 'incomeAndExpense' } as const;
@@ -63,6 +70,7 @@ const styles = StyleSheet.create({
   backLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   addButton: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
   category: { marginBottom: spacing.sm },
+  subcategory: { marginLeft: spacing.xl },
   row: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   text: { flex: 1 },
   name: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },

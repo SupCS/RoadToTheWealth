@@ -9,7 +9,7 @@ import type { Category } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { AppTextField, ErrorState, LoadingState, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
-import { categoryColorLabelKeys, categoryColorTokens, categoryIconSets, resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon, type CategoryColorToken, type CategoryIconName } from '@/src/features/categories/category-appearance';
+import { categoryColorOptions, categoryIconColorOptions, categoryIconSets, resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon, type CategoryColorValue, type CategoryIconName } from '@/src/features/categories/category-appearance';
 import { useSettings } from '@/src/settings/settings-context';
 
 export default function CategoryEditorScreen() {
@@ -25,7 +25,8 @@ export default function CategoryEditorScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState<CategoryIconName>('shape-outline');
-  const [colorToken, setColorToken] = useState<CategoryColorToken>('primary');
+  const [colorToken, setColorToken] = useState<CategoryColorValue>(categoryColorOptions[0]!.value);
+  const [iconColor, setIconColor] = useState<CategoryColorValue>('#FFFFFF');
   const [applicability, setApplicability] = useState<Category['applicability']>('expense');
   const [parentId, setParentId] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -36,12 +37,13 @@ export default function CategoryEditorScreen() {
       const household = await repository.getActiveHousehold();
       if (!household) throw new Error('Household missing');
       const [member, allCategories, existing] = await Promise.all([repository.getActiveMember(household.id), repository.listCategories(household.id), isNew ? Promise.resolve(null) : repository.getCategory(id)]);
-      if (!member || (!isNew && !existing) || existing?.systemKey) throw new Error('Category context missing');
+      if (!member || (!isNew && !existing)) throw new Error('Category context missing');
       setHouseholdId(household.id); setMemberId(member.id); setCategories(allCategories);
       if (existing) {
         setCategory(existing); setName(existing.names[locale]); setApplicability(existing.applicability); setParentId(existing.parentId ?? '');
         setIcon(resolveCategoryIcon(existing.icon));
-        setColorToken(categoryColorTokens.includes(existing.colorToken as CategoryColorToken) ? existing.colorToken as CategoryColorToken : 'primary');
+        setColorToken(resolveCategoryColor(theme, existing.colorToken));
+        setIconColor(resolveCategoryForeground(theme, existing.colorToken, existing.iconColor));
       }
       setStatus('ready');
     } catch { setStatus('error'); }
@@ -51,13 +53,13 @@ export default function CategoryEditorScreen() {
 
   async function save() {
     const trimmedName = name.trim();
-    if (!trimmedName) { setError(t('categoryNamesRequired')); return; }
+    if (!category?.systemKey && !trimmedName) { setError(t('categoryNamesRequired')); return; }
     if (!householdId || !memberId) return;
     setStatus('saving'); setError(null);
     const now = new Date().toISOString();
     try {
-      await repository.saveCategory({ id: category?.id ?? Crypto.randomUUID(), householdId, parentId: parentId || null, applicability, systemKey: null,
-        names: { en: trimmedName, uk: trimmedName, ru: trimmedName }, icon, colorToken, isArchived: category?.isArchived ?? false,
+      await repository.saveCategory({ id: category?.id ?? Crypto.randomUUID(), householdId: category ? category.householdId : householdId, parentId: category?.systemKey ? category.parentId : parentId || null, applicability: category?.systemKey ? category.applicability : applicability, systemKey: category?.systemKey ?? null,
+        names: category?.systemKey ? category.names : { en: trimmedName, uk: trimmedName, ru: trimmedName }, icon, colorToken, iconColor, isArchived: category?.isArchived ?? false,
         createdAt: category?.createdAt ?? now, updatedAt: now, createdByMemberId: category?.createdByMemberId ?? memberId,
         updatedByMemberId: memberId, revision: (category?.revision ?? 0) + 1, deletedAt: null });
       router.replace('/categories' as Href);
@@ -74,17 +76,18 @@ export default function CategoryEditorScreen() {
   return <Screen>
     <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons color={theme.primary} name="arrow-left" size={24} /><Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text></Pressable>
     <ScreenHeader title={isNew ? t('newCategory') : t('editCategory')} />
-    <AppTextField label={t('categoryName')} onChangeText={setName} value={name} />
-    <View style={styles.preview}><View style={[styles.previewIcon, { backgroundColor: resolveCategoryColor(theme, colorToken) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, colorToken)} name={icon} size={30} /></View><Text style={[styles.previewName, { color: theme.text }]}>{name.trim() || t('categoryName')}</Text></View>
+    {!category?.systemKey ? <AppTextField label={t('categoryName')} onChangeText={setName} value={name} /> : null}
+    <View style={styles.preview}><View style={[styles.previewIcon, { backgroundColor: resolveCategoryColor(theme, colorToken) }]}><MaterialCommunityIcons color={iconColor} name={icon} size={30} /></View><Text style={[styles.previewName, { color: theme.text }]}>{name.trim() || t('categoryName')}</Text></View>
     <Text style={[styles.label, { color: theme.text }]}>{t('categoryColor')}</Text>
-    <View accessibilityRole="radiogroup" style={styles.colorChoices}>{categoryColorTokens.map((token) => { const active = token === colorToken; return <Pressable accessibilityLabel={t(categoryColorLabelKeys[token])} accessibilityRole="radio" accessibilityState={{ checked: active }} key={token} onPress={() => setColorToken(token)} style={[styles.colorChoice, { backgroundColor: resolveCategoryColor(theme, token), borderColor: active ? theme.text : theme.border, borderWidth: active ? 3 : 1 }]}>{active ? <MaterialCommunityIcons color={resolveCategoryForeground(theme, token)} name="check" size={22} /> : null}</Pressable>; })}</View>
+    <View accessibilityRole="radiogroup" style={styles.colorChoices}>{categoryColorOptions.map((option) => { const active = option.value === colorToken; return <Pressable accessibilityLabel={t(option.labelKey)} accessibilityRole="radio" accessibilityState={{ checked: active }} key={option.value} onPress={() => setColorToken(option.value)} style={[styles.colorChoice, { backgroundColor: option.value, borderColor: active ? theme.text : theme.border, borderWidth: active ? 3 : 1 }]}>{active ? <MaterialCommunityIcons color={resolveCategoryForeground(theme, option.value)} name="check" size={22} /> : null}</Pressable>; })}</View>
+    <Text style={[styles.label, { color: theme.text }]}>{t('categoryIconColor')}</Text>
+    <View accessibilityRole="radiogroup" style={styles.colorChoices}>{categoryIconColorOptions.map((color) => { const active = color === iconColor; return <Pressable accessibilityLabel={color} accessibilityRole="radio" accessibilityState={{ checked: active }} key={color} onPress={() => setIconColor(color)} style={[styles.colorChoice, { backgroundColor: color, borderColor: active ? theme.text : theme.border, borderWidth: active ? 3 : 1 }]}>{active ? <MaterialCommunityIcons color={resolveCategoryForeground(theme, color)} name="check" size={22} /> : null}</Pressable>; })}</View>
     <Text style={[styles.label, { color: theme.text }]}>{t('categoryIcon')}</Text>
-    {categoryIconSets.map((set) => <View key={set.key} style={styles.iconSet}><Text style={[styles.iconSetLabel, { color: theme.muted }]}>{t(set.key)}</Text><View accessibilityRole="radiogroup" style={styles.iconChoices}>{set.icons.map((candidate) => { const active = candidate === icon; return <Pressable accessibilityLabel={candidate} accessibilityRole="radio" accessibilityState={{ checked: active }} key={candidate} onPress={() => setIcon(candidate)} style={[styles.iconChoice, { backgroundColor: active ? resolveCategoryColor(theme, colorToken) : theme.surface, borderColor: active ? resolveCategoryColor(theme, colorToken) : theme.border }]}><MaterialCommunityIcons color={active ? resolveCategoryForeground(theme, colorToken) : theme.text} name={candidate} size={25} /></Pressable>; })}</View></View>)}
-    <ChoiceGroup label={t('categoryUsage')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('incomeAndExpense'), value: 'both' }]} selected={applicability} onSelect={(value) => { setApplicability(value as Category['applicability']); setParentId(''); }} />
-    <ChoiceGroup label={t('parentCategory')} options={[{ label: t('noParentCategory'), value: '' }, ...possibleParents.map((candidate) => ({ label: candidate.names[locale], value: candidate.id }))]} selected={parentId} onSelect={setParentId} />
+    {categoryIconSets.map((set) => <View key={set.key} style={styles.iconSet}><Text style={[styles.iconSetLabel, { color: theme.muted }]}>{t(set.key)}</Text><View accessibilityRole="radiogroup" style={styles.iconChoices}>{set.icons.map((candidate) => { const active = candidate === icon; return <Pressable accessibilityLabel={candidate} accessibilityRole="radio" accessibilityState={{ checked: active }} key={candidate} onPress={() => setIcon(candidate)} style={[styles.iconChoice, { backgroundColor: active ? resolveCategoryColor(theme, colorToken) : theme.surface, borderColor: active ? resolveCategoryColor(theme, colorToken) : theme.border }]}><MaterialCommunityIcons color={active ? iconColor : theme.text} name={candidate} size={25} /></Pressable>; })}</View></View>)}
+    {!category?.systemKey ? <><ChoiceGroup label={t('categoryUsage')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('incomeAndExpense'), value: 'both' }]} selected={applicability} onSelect={(value) => { setApplicability(value as Category['applicability']); setParentId(''); }} /><ChoiceGroup label={t('parentCategory')} options={[{ label: t('noParentCategory'), value: '' }, ...possibleParents.map((candidate) => ({ label: candidate.names[locale], value: candidate.id }))]} selected={parentId} onSelect={setParentId} /></> : null}
     {error ? <Text accessibilityLiveRegion="polite" style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
     <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />
-    {category && !category.isArchived ? <Pressable accessibilityRole="button" onPress={archive} style={[styles.archiveButton, { borderColor: theme.danger }]}><Text style={[styles.archiveLabel, { color: theme.danger }]}>{t('archiveCategory')}</Text></Pressable> : null}
+    {category && !category.systemKey && !category.isArchived ? <Pressable accessibilityRole="button" onPress={archive} style={[styles.archiveButton, { borderColor: theme.danger }]}><Text style={[styles.archiveLabel, { color: theme.danger }]}>{t('archiveCategory')}</Text></Pressable> : null}
   </Screen>;
 }
 

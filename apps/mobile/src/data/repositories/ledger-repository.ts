@@ -52,6 +52,7 @@ export type Category = AuditFields & Readonly<{
   names: Readonly<{ en: string; uk: string; ru: string }>;
   icon: string | null;
   colorToken: string | null;
+  iconColor: string | null;
   isArchived: boolean;
 }>;
 

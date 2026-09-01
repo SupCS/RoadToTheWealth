@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 8;
+export const DATABASE_VERSION = 9;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -278,6 +278,12 @@ const migrations = [
 
       CREATE INDEX fx_rate_cache_effective_date_idx
         ON fx_rate_cache(base_currency_code, quote_currency_code, effective_date);
+    `,
+  },
+  {
+    version: 9,
+    sql: `
+      ALTER TABLE categories ADD COLUMN icon_color TEXT;
     `,
   },
 ] as const;

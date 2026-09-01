@@ -359,12 +359,13 @@ function CategoryChoiceGroup({ allCategories, categories, label, locale, onSelec
   allCategories: Category[]; categories: Category[]; label: string; locale: 'en' | 'uk' | 'ru'; onSelect: (value: string) => void; selected: string;
 }) {
   const { t, theme } = useSettings();
-  return <View style={styles.group}><Text style={[styles.label, { color: theme.text }]}>{label} ({t('optional')})</Text><View style={styles.categoryChoices}>{categories.map((category) => {
+  const router = useRouter();
+  return <View style={styles.group}><View style={styles.categoryHeading}><Text style={[styles.label, { color: theme.text }]}>{label} ({t('optional')})</Text><Pressable accessibilityRole="button" onPress={() => router.push('/categories' as Href)} style={styles.editCategoriesButton}><MaterialCommunityIcons color={theme.primary} name="shape-plus-outline" size={19} /><Text style={[styles.editCategoriesLabel, { color: theme.primary }]}>{t('editCategoryList')}</Text></Pressable></View><View style={styles.categoryChoices}>{categories.map((category) => {
     const active = category.id === selected;
     const color = resolveCategoryColor(theme, category.colorToken);
-    return <Pressable accessibilityRole="radio" accessibilityState={{ checked: active }} key={category.id} onPress={() => onSelect(active ? '' : category.id)} style={[styles.categoryChoice, { backgroundColor: active ? color : theme.surface, borderColor: active ? color : theme.border }]}>
-      <View style={[styles.categoryChoiceIcon, { backgroundColor: active ? theme.background : color }]}><MaterialCommunityIcons color={active ? theme.text : resolveCategoryForeground(theme, category.colorToken)} name={resolveCategoryIcon(category.icon)} size={21} /></View>
-      <Text numberOfLines={2} style={[styles.categoryChoiceLabel, { color: active ? resolveCategoryForeground(theme, category.colorToken) : theme.text }]}>{categoryLabel(category, allCategories, locale)}</Text>
+    return <Pressable accessibilityRole="radio" accessibilityState={{ checked: active }} key={category.id} onPress={() => onSelect(active ? '' : category.id)} style={[styles.categoryChoice, { backgroundColor: theme.surface, borderColor: active ? color : theme.border, borderWidth: active ? 3 : 1 }]}>
+      <View style={[styles.categoryChoiceIcon, { backgroundColor: color }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category.colorToken, category.iconColor)} name={resolveCategoryIcon(category.icon)} size={21} /></View>
+      <Text numberOfLines={2} style={[styles.categoryChoiceLabel, { color: theme.text }]}>{categoryLabel(category, allCategories, locale)}</Text>
     </Pressable>;
   })}</View></View>;
 }
@@ -395,7 +396,7 @@ const styles = StyleSheet.create({
   choice: { borderRadius: radii.lg, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   splitToggle: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  categoryChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, categoryChoice: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: '48%' }, categoryChoiceIcon: { alignItems: 'center', borderRadius: 17, height: 34, justifyContent: 'center', width: 34 }, categoryChoiceLabel: { flex: 1, fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
+  categoryHeading: { alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm }, editCategoriesButton: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs, minHeight: 44 }, editCategoriesLabel: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold }, categoryChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, categoryChoice: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: '48%' }, categoryChoiceIcon: { alignItems: 'center', borderRadius: 17, height: 34, justifyContent: 'center', width: 34 }, categoryChoiceLabel: { flex: 1, fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
   detailsButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, minHeight: 44 },
   detailsLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
 });

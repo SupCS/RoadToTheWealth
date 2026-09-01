@@ -110,15 +110,16 @@ export default function TransactionsScreen() {
         {transactions.map((transaction) => {
           const account = state.accounts.find((candidate) => candidate.id === transaction.accountId);
           const category = state.categories.find((candidate) => candidate.id === transaction.categoryId);
+          const parentCategory = category?.parentId ? state.categories.find((candidate) => candidate.id === category.parentId) : null;
           const tone = transaction.originalAmount.amountMinor < 0n ? 'danger' : 'positive';
           const editable = transaction.transactionType === 'expense' || transaction.transactionType === 'income';
           const reportingAmount = reportingAmounts[transaction.id];
           return <Pressable key={transaction.id} onLongPress={() => showTransactionActions(transaction)} onPress={editable ? () => router.push(`/transaction/new?id=${transaction.id}`) : undefined} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
           <Card>
             <View style={styles.row}>
-              <View style={[styles.transactionIcon, { backgroundColor: resolveCategoryColor(theme, category?.colorToken ?? null) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category?.colorToken ?? null)} name={category ? resolveCategoryIcon(category.icon) : 'swap-horizontal'} size={24} /></View>
+              <View style={[styles.transactionIcon, { backgroundColor: resolveCategoryColor(theme, category?.colorToken ?? null) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category?.colorToken ?? null, category?.iconColor ?? null)} name={category ? resolveCategoryIcon(category.icon) : 'swap-horizontal'} size={24} /></View>
               <View style={styles.details}>
-                <Text style={[styles.transactionTitle, { color: theme.text }]}>{category?.names[locale] ?? t(transactionTypeKey[transaction.transactionType])}</Text>
+                <Text style={[styles.transactionTitle, { color: theme.text }]}>{category ? `${parentCategory ? `${parentCategory.names[locale]} › ` : ''}${category.names[locale]}` : t(transactionTypeKey[transaction.transactionType])}</Text>
                 {transaction.description ? <Text style={[styles.description, { color: theme.muted }]}>{transaction.description}</Text> : null}
                 <Text style={[styles.meta, { color: theme.muted }]}>{account?.name ?? t('unknownAccount')}{transaction.status === 'fx_pending' ? ` · ${t('fxPending')}` : ''}</Text>
               </View>
@@ -140,7 +141,7 @@ export default function TransactionsScreen() {
             <ScrollView>
             <FilterChoices label={t('transactionType')} options={[{ label: t('all'), value: 'all' }, ...Object.entries(transactionTypeKey).map(([value, key]) => ({ label: t(key), value }))]} selected={typeFilter} onSelect={(value) => setTypeFilter(value as typeof typeFilter)} />
             <FilterChoices label={t('account')} options={[{ label: t('all'), value: 'all' }, ...(state.status === 'ready' ? state.accounts.map((account) => ({ label: account.name, value: account.id })) : [])]} selected={accountFilter} onSelect={setAccountFilter} />
-            <FilterChoices label={t('category')} options={[{ label: t('all'), value: 'all' }, ...(state.status === 'ready' ? state.categories.map((category) => ({ label: category.names[locale], value: category.id })) : [])]} selected={categoryFilter} onSelect={setCategoryFilter} />
+            <FilterChoices label={t('category')} options={[{ label: t('all'), value: 'all' }, ...(state.status === 'ready' ? state.categories.map((category) => { const parent = category.parentId ? state.categories.find((candidate) => candidate.id === category.parentId) : null; return { label: `${parent ? `${parent.names[locale]} › ` : ''}${category.names[locale]}`, value: category.id }; }) : [])]} selected={categoryFilter} onSelect={setCategoryFilter} />
             <FilterChoices label={t('currency')} options={[{ label: t('all'), value: 'all' }, ...currencies.map((currency) => ({ label: currency, value: currency }))]} selected={currencyFilter} onSelect={setCurrencyFilter} />
             <FilterChoices label={t('transactionSource')} options={[{ label: t('all'), value: 'all' }, { label: t('sourceManual'), value: 'manual' }, { label: t('sourceImport'), value: 'import' }, { label: t('sourceRecurring'), value: 'recurring' }, { label: t('sourceBankApi'), value: 'bank_api' }]} selected={sourceFilter} onSelect={(value) => setSourceFilter(value as typeof sourceFilter)} />
             </ScrollView>

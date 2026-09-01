@@ -1,7 +1,7 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Account, Category, Transaction } from '@/src/data/repositories/ledger-repository';
@@ -10,7 +10,7 @@ import { Card, ErrorState, LoadingState, MoneyText } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import { formatMoney, type Money } from '@/src/domain/money/money';
 import { deriveReportingAmounts } from '@/src/fx/reporting-amounts';
-import { resolveCategoryIcon } from '@/src/features/categories/category-appearance';
+import { resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon } from '@/src/features/categories/category-appearance';
 import { formatDate } from '@/src/i18n/formatters';
 import { useSettings } from '@/src/settings/settings-context';
 
@@ -33,6 +33,7 @@ export function DashboardOverview() {
   const [period, setPeriod] = useState<Period>('month');
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reportingAmounts, setReportingAmounts] = useState<Record<string, Money>>({});
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -76,7 +77,7 @@ export function DashboardOverview() {
     && transaction.status !== 'planned');
   const expenseMinor = sumType(visible, reportingAmounts, 'expense');
   const incomeMinor = sumType(visible, reportingAmounts, 'income');
-  const categoryRows = buildCategoryRows(visible, reportingAmounts, state.categories, locale);
+  const categoryRows = buildCategoryRows(visible, reportingAmounts, state.categories, locale, t('withoutSubcategory'));
   const recent = state.transactions.filter((transaction) => accountIds.has(transaction.accountId)).slice(0, 3);
 
   return <>
@@ -119,14 +120,10 @@ export function DashboardOverview() {
       <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('spendingByCategory')}</Text>
       <Text style={[styles.sectionMeta, { color: theme.muted }]}>{baseCurrency}</Text>
     </View>
-    {categoryRows.length ? <Card>{categoryRows.slice(0, 6).map((row, index) => <View key={row.id} style={[styles.categoryRow, index > 0 && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
-      <View style={[styles.categoryIcon, { backgroundColor: theme.background }]}><MaterialCommunityIcons color={theme.primary} name={resolveCategoryIcon(row.icon ?? null)} size={22} /></View>
-      <View style={styles.categoryMain}>
-        <View style={styles.categoryLabels}><Text numberOfLines={1} style={[styles.categoryName, { color: theme.text }]}>{row.name}</Text><Text style={[styles.categoryPercent, { color: theme.muted }]}>{row.percent}%</Text></View>
-        <View style={[styles.track, { backgroundColor: theme.background }]}><View style={[styles.fill, { backgroundColor: theme.primary, width: `${row.percent}%` }]} /></View>
-      </View>
-      <MoneyText locale={locale} value={{ amountMinor: row.amountMinor, currency: baseCurrency }} />
-    </View>)}</Card> : <Card><Text style={[styles.emptyText, { color: theme.muted }]}>{t('noSpendingInPeriod')}</Text></Card>}
+    {categoryRows.length ? <Card>{categoryRows.slice(0, 6).map((row, index) => { const expanded = expandedCategoryIds.has(row.id); return <Fragment key={row.id}>
+      <CategorySpendingRow baseCurrency={baseCurrency} expanded={expanded} first={index === 0} locale={locale} onPress={row.children.length ? () => setExpandedCategoryIds((current) => { const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; }) : undefined} row={row} />
+      {expanded ? row.children.map((child) => <CategorySpendingRow baseCurrency={baseCurrency} child key={child.id} locale={locale} row={child} />) : null}
+    </Fragment>; })}</Card> : <Card><Text style={[styles.emptyText, { color: theme.muted }]}>{t('noSpendingInPeriod')}</Text></Card>}
 
     <View style={styles.sectionHeading}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('recent')}</Text>
@@ -153,22 +150,51 @@ function SummaryMetric({ icon, label, tone, value }: { icon: 'arrow-up-right' | 
   return <View style={[styles.metric, { backgroundColor: theme.surface, borderColor: theme.border }]}><View style={styles.metricLabel}><MaterialCommunityIcons color={tone} name={icon} size={18} /><Text style={[styles.metricLabelText, { color: theme.muted }]}>{label}</Text></View><MoneyText locale={locale} value={value} variant="metric" /></View>;
 }
 
+type CategoryRow = { amountMinor: bigint; children: CategoryRow[]; colorToken: string | null; icon: string | null; iconColor: string | null; id: string; name: string; percent: number };
+
+function CategorySpendingRow({ baseCurrency, child = false, expanded = false, first = false, locale, onPress, row }: { baseCurrency: Money['currency']; child?: boolean; expanded?: boolean; first?: boolean; locale: 'en' | 'uk' | 'ru'; onPress?: () => void; row: CategoryRow }) {
+  const { theme } = useSettings();
+  const color = resolveCategoryColor(theme, row.colorToken);
+  return <Pressable accessibilityRole={onPress ? 'button' : undefined} accessibilityState={onPress ? { expanded } : undefined} disabled={!onPress} onPress={onPress} style={[styles.categoryRow, child && styles.childCategoryRow, !first && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+    <View style={[styles.categoryIcon, child && styles.childCategoryIcon, { backgroundColor: color }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, row.colorToken, row.iconColor)} name={resolveCategoryIcon(row.icon)} size={child ? 18 : 22} /></View>
+    <View style={styles.categoryMain}><View style={styles.categoryLabels}><Text numberOfLines={1} style={[styles.categoryName, child && styles.childCategoryName, { color: theme.text }]}>{row.name}</Text><Text style={[styles.categoryPercent, { color: theme.muted }]}>{row.percent}%</Text></View><View style={[styles.track, { backgroundColor: theme.background }]}><View style={[styles.fill, { backgroundColor: color, width: `${row.percent}%` }]} /></View></View>
+    <MoneyText locale={locale} value={{ amountMinor: row.amountMinor, currency: baseCurrency }} />
+    {onPress ? <MaterialCommunityIcons color={theme.muted} name={expanded ? 'chevron-up' : 'chevron-down'} size={20} /> : null}
+  </Pressable>;
+}
+
 function sumType(transactions: Transaction[], amounts: Record<string, Money>, type: 'expense' | 'income') {
   return transactions.filter((transaction) => transaction.transactionType === type).reduce((total, transaction) => total + abs(amounts[transaction.id]?.amountMinor ?? 0n), 0n);
 }
 
-function buildCategoryRows(transactions: Transaction[], amounts: Record<string, Money>, categories: Category[], locale: 'en' | 'uk' | 'ru') {
+function buildCategoryRows(transactions: Transaction[], amounts: Record<string, Money>, categories: Category[], locale: 'en' | 'uk' | 'ru', withoutSubcategory: string): CategoryRow[] {
   const totals = new Map<string, bigint>();
   for (const transaction of transactions) if (transaction.transactionType === 'expense') {
     const key = transaction.categoryId ?? 'uncategorized';
     totals.set(key, (totals.get(key) ?? 0n) + abs(amounts[transaction.id]?.amountMinor ?? 0n));
   }
   const total = [...totals.values()].reduce((sum, value) => sum + value, 0n);
-  return [...totals.entries()].map(([id, amountMinor]) => {
+  const roots = new Map<string, { amountMinor: bigint; breakdown: Map<string, bigint> }>();
+  for (const [id, amountMinor] of totals) {
     const category = categories.find((candidate) => candidate.id === id);
-    return { amountMinor, icon: category?.icon, id, name: category?.names[locale] ?? '—', percent: total ? Number((amountMinor * 100n) / total) : 0 };
-  }).sort((a, b) => a.amountMinor > b.amountMinor ? -1 : a.amountMinor < b.amountMinor ? 1 : 0);
+    const rootId = category?.parentId ?? id;
+    const root = roots.get(rootId) ?? { amountMinor: 0n, breakdown: new Map<string, bigint>() };
+    root.amountMinor += amountMinor;
+    root.breakdown.set(id, (root.breakdown.get(id) ?? 0n) + amountMinor);
+    roots.set(rootId, root);
+  }
+  return [...roots.entries()].map(([id, root]) => {
+    const category = categories.find((candidate) => candidate.id === id);
+    const hasSubcategories = categories.some((candidate) => candidate.parentId === id);
+    const children: CategoryRow[] = hasSubcategories ? [...root.breakdown.entries()].map(([childId, amountMinor]) => {
+      const child = categories.find((candidate) => candidate.id === childId);
+      return { amountMinor, children: [], colorToken: child?.colorToken ?? category?.colorToken ?? null, icon: child?.icon ?? category?.icon ?? null, iconColor: child?.iconColor ?? category?.iconColor ?? null, id: `${id}:${childId}`, name: childId === id ? withoutSubcategory : child?.names[locale] ?? '—', percent: total ? Number((amountMinor * 100n) / total) : 0 };
+    }).sort(compareCategoryRows) : [];
+    return { amountMinor: root.amountMinor, children, colorToken: category?.colorToken ?? null, icon: category?.icon ?? null, iconColor: category?.iconColor ?? null, id, name: category?.names[locale] ?? '—', percent: total ? Number((root.amountMinor * 100n) / total) : 0 };
+  }).sort(compareCategoryRows);
 }
+
+function compareCategoryRows(first: CategoryRow, second: CategoryRow) { return first.amountMinor > second.amountMinor ? -1 : first.amountMinor < second.amountMinor ? 1 : 0; }
 
 function abs(value: bigint) { return value < 0n ? -value : value; }
 function isoDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
@@ -206,10 +232,13 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold },
   sectionMeta: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
   categoryRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, minHeight: 64, paddingVertical: spacing.sm },
+  childCategoryRow: { marginLeft: spacing.xl, minHeight: 54 },
   categoryIcon: { alignItems: 'center', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
+  childCategoryIcon: { borderRadius: 16, height: 32, width: 32 },
   categoryMain: { flex: 1, gap: spacing.sm },
   categoryLabels: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between' },
   categoryName: { flex: 1, fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  childCategoryName: { fontSize: fontSizes.caption },
   categoryPercent: { fontSize: fontSizes.caption },
   track: { borderRadius: radii.pill, height: 4, overflow: 'hidden' },
   fill: { borderRadius: radii.pill, height: 4 },
