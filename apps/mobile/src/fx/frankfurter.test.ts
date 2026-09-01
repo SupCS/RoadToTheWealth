@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getHistoricalRateOnOrBefore, getLatestRates } from './frankfurter';
+import { getHistoricalRateOnOrBefore, getLatestRates, getRateHistoryResult } from './frankfurter';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: { getItem: vi.fn(), setItem: vi.fn() },
@@ -88,5 +88,57 @@ describe('Frankfurter rates', () => {
   it('reports a missing historical rate when offline and uncached', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     await expect(getHistoricalRateOnOrBefore('USD', 'EUR', '2026-08-30')).rejects.toThrow('offline');
+  });
+
+  it('returns and stores the Frankfurter failure behind an NBG history fallback', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('Network request failed'))
+      .mockResolvedValue({
+        ok: true,
+        json: async () => [{
+          date: '2026-09-01T00:00:00.000Z',
+          currencies: [{ code: 'USD', quantity: 1, rate: 2.6 }],
+        }],
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getRateHistoryResult('GEL', 'USD', '2026-08-31', '2026-09-01');
+    expect(result).toMatchObject({ source: 'nbg', frankfurterError: 'Network request failed' });
+    expect(result.rates.length).toBeGreaterThan(0);
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('Network request failed'));
+  });
+
+  it('uses the v2 history query without the removed group parameter', async () => {
+    const fetchMock = vi.fn(async (_url: string) => ({
+      ok: true,
+      json: async () => [{ base: 'GEL', quote: 'USD', date: '2026-09-01', rate: 0.38 }],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getRateHistoryResult('GEL', 'USD', '2026-08-01', '2026-09-01');
+    const requestedUrl = String(fetchMock.mock.calls[0]?.[0]);
+    expect(requestedUrl).not.toContain('group=');
+    expect(requestedUrl).toContain('from=2026-08-01');
+    expect(result.source).toBe('frankfurter');
+  });
+
+  it('refreshes a legacy NBG history cache to capture the real diagnostic', async () => {
+    vi.mocked(AsyncStorage.getItem).mockResolvedValue(JSON.stringify([
+      { base: 'GEL', quote: 'USD', date: '2026-09-01', rate: 0.38, provider: 'nbg' },
+    ]));
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('Network request failed'))
+      .mockResolvedValue({
+        ok: true,
+        json: async () => [{
+          date: '2026-09-01T00:00:00.000Z',
+          currencies: [{ code: 'USD', quantity: 1, rate: 2.6 }],
+        }],
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await getRateHistoryResult('GEL', 'USD', '2026-09-01', '2026-09-01');
+    expect(result.frankfurterError).toBe('Network request failed');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

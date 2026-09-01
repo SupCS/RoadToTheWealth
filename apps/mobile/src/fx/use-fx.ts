@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { FxRatesError, getLatestRates, getRateHistory, type FxRate } from '@/src/fx/frankfurter';
+import { FxRatesError, getLatestRates, getRateHistoryResult, type FxRate } from '@/src/fx/frankfurter';
 import type { CurrencyCode } from '@/src/settings/settings-context';
 
 type LatestState = {
@@ -37,6 +37,8 @@ export function useRateHistory(base: CurrencyCode, quote: CurrencyCode) {
   const [rates, setRates] = useState<FxRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [frankfurterError, setFrankfurterError] = useState<string | null>(null);
+  const [source, setSource] = useState<'frankfurter' | 'nbg' | null>(null);
 
   useEffect(() => {
     const toDate = new Date();
@@ -47,11 +49,17 @@ export function useRateHistory(base: CurrencyCode, quote: CurrencyCode) {
 
     setLoading(true);
     setError(false);
-    void getRateHistory(base, quote, from, to)
-      .then((result) => setRates(result))
+    setFrankfurterError(null);
+    setSource(null);
+    void getRateHistoryResult(base, quote, from, to)
+      .then((result) => {
+        setRates(result.rates);
+        setFrankfurterError(result.frankfurterError);
+        setSource(result.source);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [base, quote]);
 
-  return { error, loading, rates };
+  return { error, frankfurterError, loading, rates, source };
 }

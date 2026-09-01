@@ -27,6 +27,39 @@ export async function getNbgRates(base: MoneyCurrencyCode, quotes: MoneyCurrency
   });
 }
 
+export async function getNbgRateHistory(
+  base: MoneyCurrencyCode,
+  quote: MoneyCurrencyCode,
+  from: string,
+  to: string,
+): Promise<FxRate[]> {
+  const dates = weekdaysBetween(from, to);
+  const collected: FxRate[] = [];
+  const concurrency = 5;
+  for (let index = 0; index < dates.length; index += concurrency) {
+    const batch = dates.slice(index, index + concurrency);
+    const results = await Promise.all(batch.map((date) => getNbgRates(base, [quote], date)));
+    collected.push(...results.flat());
+  }
+  const byEffectiveDate = new Map(collected.map((rate) => [rate.date, rate]));
+  return [...byEffectiveDate.values()]
+    .filter((rate) => rate.date >= from && rate.date <= to)
+    .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function weekdaysBetween(from: string, to: string): string[] {
+  const cursor = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime()) || cursor > end) throw new Error('Invalid NBG history range');
+  const dates: string[] = [];
+  while (cursor <= end) {
+    const day = cursor.getUTCDay();
+    if (day !== 0 && day !== 6) dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
 function isDailyRates(value: unknown): value is NbgDailyRates {
   if (!value || typeof value !== 'object') return false;
   const daily = value as Partial<NbgDailyRates>;
