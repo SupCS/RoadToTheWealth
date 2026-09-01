@@ -251,4 +251,16 @@ describe('SQLiteLedgerRepository', () => {
     expect(db.transactionDb.runAsync.mock.calls[1]?.[0]).toContain('UPDATE transaction_splits');
     expect(db.transactionDb.runAsync.mock.calls[2]?.[0]).toContain('UPDATE transfer_links');
   });
+
+  it('archives only custom categories and their direct subcategories', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+
+    await repository.setCategoryArchived('category-1', true, '2026-09-02T00:00:00.000Z', 'member-1');
+
+    expect(db.runAsync).toHaveBeenCalledOnce();
+    expect(db.runAsync.mock.calls[0]?.[0]).toContain('(id = ? OR parent_id = ?)');
+    expect(db.runAsync.mock.calls[0]?.[0]).toContain('household_id IS NOT NULL');
+    expect(db.runAsync.mock.calls[0]?.[0]).toContain('system_key IS NULL');
+  });
 });

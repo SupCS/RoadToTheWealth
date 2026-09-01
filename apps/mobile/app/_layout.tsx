@@ -15,6 +15,8 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="accounts/index" />
         <Stack.Screen name="accounts/[id]" />
+        <Stack.Screen name="categories/index" />
+        <Stack.Screen name="categories/[id]" />
         <Stack.Screen name="transaction/new" />
         <Stack.Screen name="fx/[quote]" />
       </Stack>

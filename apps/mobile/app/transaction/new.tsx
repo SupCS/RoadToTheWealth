@@ -256,6 +256,10 @@ export default function NewTransactionScreen() {
             }} />
             {splitCategoryIds.map((id) => <AppTextField key={id} keyboardType="decimal-pad" label={`${categoryLabel(categories.find((category) => category.id === id)!, categories, locale)} · ${t('amount')}`} onChangeText={(value) => setSplitAmounts((current) => ({ ...current, [id]: value }))} value={splitAmounts[id] ?? ''} />)}
           </> : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: categoryLabel(category, categories, locale), value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
+          <Pressable accessibilityRole="button" onPress={() => router.push('/categories' as Href)} style={styles.manageCategoriesButton}>
+            <MaterialCommunityIcons color={theme.primary} name="shape-plus-outline" size={20} />
+            <Text style={[styles.manageCategoriesLabel, { color: theme.primary }]}>{t('manageCategories')}</Text>
+          </Pressable>
         </>}
         {type === 'transfer' ? <AppTextField keyboardType="decimal-pad" label={`${t('transferFee')} (${t('optional')})`} onChangeText={setFeeAmount} value={feeAmount} /> : null}
         <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
@@ -322,4 +326,6 @@ const styles = StyleSheet.create({
   choice: { borderRadius: radii.lg, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   splitToggle: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  manageCategoriesButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44 },
+  manageCategoriesLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
 });

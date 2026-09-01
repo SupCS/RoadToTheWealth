@@ -107,7 +107,9 @@ export interface LedgerRepository {
   listAccountSummaries(householdId: string): Promise<AccountSummary[]>;
   getBalances(scope: BalanceScope): Promise<Money[]>;
   saveCategory(category: Category): Promise<void>;
+  getCategory(categoryId: string): Promise<Category | null>;
   listCategories(householdId: string): Promise<Category[]>;
+  setCategoryArchived(categoryId: string, archived: boolean, updatedAt: string, updatedByMemberId: string): Promise<void>;
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
   getTransaction(transactionId: string): Promise<TransactionDetails | null>;
   listTransactions(householdId: string): Promise<Transaction[]>;

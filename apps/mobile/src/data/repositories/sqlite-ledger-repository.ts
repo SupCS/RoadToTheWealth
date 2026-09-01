@@ -363,6 +363,25 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     return rows.map(mapCategory);
   }
 
+  async getCategory(categoryId: string): Promise<Category | null> {
+    const row = await this.db.getFirstAsync<CategoryRow>(
+      `SELECT id, household_id, parent_id, applicability, system_key, name_en, name_uk, name_ru,
+        icon, color_token, is_archived, created_at, updated_at, created_by_member_id,
+        updated_by_member_id, revision, deleted_at
+      FROM categories WHERE id = ? AND deleted_at IS NULL`, categoryId,
+    );
+    return row ? mapCategory(row) : null;
+  }
+
+  async setCategoryArchived(categoryId: string, archived: boolean, updatedAt: string, updatedByMemberId: string): Promise<void> {
+    const result = await this.db.runAsync(
+      `UPDATE categories SET is_archived = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+      WHERE (id = ? OR parent_id = ?) AND household_id IS NOT NULL AND system_key IS NULL AND deleted_at IS NULL`,
+      archived ? 1 : 0, updatedAt, updatedByMemberId, categoryId, categoryId,
+    );
+    if (result.changes < 1) throw new Error('Custom category not found');
+  }
+
   async saveTransaction(value: Transaction, splits: TransactionSplit[]): Promise<void> {
     assertManualTransactionAmount(value);
     assertSplitsMatchTransaction(value, splits);
