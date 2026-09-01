@@ -310,6 +310,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
   }
 
   async saveTransaction(value: Transaction, splits: TransactionSplit[]): Promise<void> {
+    assertManualTransactionAmount(value);
     assertSplitsMatchTransaction(value, splits);
 
     await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
@@ -343,6 +344,15 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         );
       }
     });
+  }
+}
+
+function assertManualTransactionAmount(value: Transaction): void {
+  if (value.transactionType === 'expense' && value.originalAmount.amountMinor >= 0n) {
+    throw new Error('Expense amount must be negative');
+  }
+  if (value.transactionType === 'income' && value.originalAmount.amountMinor <= 0n) {
+    throw new Error('Income amount must be positive');
   }
 }
 

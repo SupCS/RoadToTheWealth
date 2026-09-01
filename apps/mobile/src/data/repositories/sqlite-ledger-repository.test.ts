@@ -101,4 +101,21 @@ describe('SQLiteLedgerRepository', () => {
     await expect(repository.saveTransaction(transaction, splits)).rejects.toThrow('sum exactly');
     expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['expense', 1000n],
+    ['income', -1000n],
+    ['income', 0n],
+  ] as const)('rejects an invalid sign for a %s transaction', async (transactionType, amountMinor) => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+
+    await expect(repository.saveTransaction({
+      id: 'transaction-1', householdId: 'household-1', accountId: 'account-1', memberId: 'member-1',
+      categoryId: null, transactionType, transactionDate: '2026-09-01', postingDate: null,
+      source: 'manual', status: 'confirmed', originalAmount: money(amountMinor, 'USD'), reportingAmount: money(amountMinor, 'USD'),
+      fxSnapshot: null, description: null, notes: null, ...audit,
+    }, [])).rejects.toThrow(transactionType === 'expense' ? 'negative' : 'positive');
+    expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();
+  });
 });
