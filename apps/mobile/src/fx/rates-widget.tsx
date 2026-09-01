@@ -23,7 +23,10 @@ export function RatesWidget() {
     <View>
       <View style={styles.headingRow}>
         <Text style={[layoutStyles.sectionTitle, styles.heading, { color: theme.text }]}>{t('exchangeRates')}</Text>
-        <MaterialCommunityIcons color={theme.primary} name="chart-line" size={22} />
+        <Pressable accessibilityLabel={t('moneyCalculator')} accessibilityRole="button" onPress={() => router.push('/fx/calculator')} style={[styles.calculatorButton, { borderColor: theme.border }]}>
+          <MaterialCommunityIcons color={theme.primary} name="calculator-variant-outline" size={19} />
+          <Text style={[styles.calculatorLabel, { color: theme.primary }]}>{t('calculator')}</Text>
+        </Pressable>
       </View>
       <Card>
         {loading ? <LoadingState label={t('loading')} /> : null}
@@ -59,6 +62,8 @@ export function RatesWidget() {
 const styles = StyleSheet.create({
   headingRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   heading: { marginBottom: 12 },
+  calculatorButton: { alignItems: 'center', borderRadius: 16, borderWidth: 1, flexDirection: 'row', gap: 5, minHeight: 34, paddingHorizontal: 10 },
+  calculatorLabel: { fontSize: 12, fontWeight: '800' },
   rateRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 58, paddingVertical: 8 },
   pair: { fontSize: 16, fontWeight: '800' },
   date: { fontSize: 11, marginTop: 2 },

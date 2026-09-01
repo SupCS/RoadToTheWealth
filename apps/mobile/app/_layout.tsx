@@ -19,6 +19,7 @@ function RootNavigator() {
         <Stack.Screen name="categories/[id]" />
         <Stack.Screen name="transaction/new" />
         <Stack.Screen name="fx/[quote]" />
+        <Stack.Screen name="fx/calculator" />
       </Stack>
     </>
   );

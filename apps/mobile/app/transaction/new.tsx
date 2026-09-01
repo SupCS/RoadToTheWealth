@@ -38,6 +38,7 @@ export default function NewTransactionScreen() {
   const [splitAmounts, setSplitAmounts] = useState<Record<string, string>>({});
   const [amount, setAmount] = useState('');
   const [feeAmount, setFeeAmount] = useState('');
+  const [manualRate, setManualRate] = useState('');
   const [date, setDate] = useState(todayLocal());
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -73,6 +74,7 @@ export default function NewTransactionScreen() {
         setAmount(toMajorAmountInput(money(absoluteAmount, transaction.originalAmount.currency)));
         setDate(copyId ? todayLocal() : transaction.transactionDate);
         setDescription(transaction.description ?? '');
+        if (transaction.fxSnapshot?.provider === 'manual') setManualRate(transaction.fxSnapshot.rateDecimal);
         setCategoryId(transaction.categoryId ?? '');
         if (details.splits.length > 0) {
           setSplitEnabled(true);
@@ -207,17 +209,37 @@ export default function NewTransactionScreen() {
       let reportingAmount = isBaseCurrency ? signedAmount : null;
       let fxSnapshot: Transaction['fxSnapshot'] = null;
       if (!isBaseCurrency) {
-        try {
-          const resolved = await resolveHistoricalRate(db, signedAmount.currency, baseCurrency, date);
-          reportingAmount = convertMoney(signedAmount, baseCurrency, resolved.rateDecimal);
-          fxSnapshot = {
-            rateDecimal: resolved.rateDecimal,
-            provider: resolved.provider,
-            requestedDate: resolved.requestedDate,
-            effectiveDate: resolved.effectiveDate,
-          };
-        } catch {
-          // Offline writes remain valid; the pending transaction can be completed later.
+        if (manualRate.trim()) {
+          try {
+            reportingAmount = convertMoney(signedAmount, baseCurrency, manualRate.trim().replace(',', '.'));
+            fxSnapshot = { rateDecimal: manualRate.trim().replace(',', '.'), provider: 'manual', requestedDate: date, effectiveDate: date };
+          } catch {
+            setStatus('ready');
+            setValidationError(t('invalidManualRate'));
+            return;
+          }
+        } else if (
+          existing?.transaction.fxSnapshot
+          && existing.transaction.originalAmount.currency === signedAmount.currency
+          && existing.transaction.transactionDate === date
+          && existing.transaction.reportingAmount?.currency === baseCurrency
+        ) {
+          const preserved = existing.transaction.fxSnapshot;
+          reportingAmount = convertMoney(signedAmount, baseCurrency, preserved.rateDecimal);
+          fxSnapshot = preserved;
+        } else {
+          try {
+            const resolved = await resolveHistoricalRate(db, signedAmount.currency, baseCurrency, date);
+            reportingAmount = convertMoney(signedAmount, baseCurrency, resolved.rateDecimal);
+            fxSnapshot = {
+              rateDecimal: resolved.rateDecimal,
+              provider: resolved.provider,
+              requestedDate: resolved.requestedDate,
+              effectiveDate: resolved.effectiveDate,
+            };
+          } catch {
+            // Offline writes remain valid; the pending transaction can be completed later.
+          }
         }
       }
       await repository.saveTransaction({
@@ -279,6 +301,7 @@ export default function NewTransactionScreen() {
           </Pressable>
         </>}
         {type === 'transfer' ? <AppTextField keyboardType="decimal-pad" label={`${t('transferFee')} (${t('optional')})`} onChangeText={setFeeAmount} value={feeAmount} /> : null}
+        {type !== 'transfer' && transactionCurrency && baseCurrency && transactionCurrency !== baseCurrency ? <AppTextField keyboardType="decimal-pad" label={`${t('manualRate')} · 1 ${transactionCurrency} = ? ${baseCurrency} (${t('optional')})`} onChangeText={setManualRate} placeholder={t('automaticRate')} value={manualRate} /> : null}
         <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
         <AppTextField autoCapitalize="none" label={t('transactionDate')} onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
         <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />

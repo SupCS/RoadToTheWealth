@@ -15,7 +15,7 @@ export function useLatestRates(base: CurrencyCode, quotes: CurrencyCode[]) {
   const quoteKey = quotes.join(',');
 
   const refresh = useCallback(async () => {
-    setState((current) => ({ ...current, error: false, loading: current.rates.length === 0 }));
+    setState({ error: false, fetchedAt: null, loading: true, rates: [] });
     try {
       const result = await getLatestRates(base, quotes);
       setState({ error: false, fetchedAt: result.fetchedAt, loading: false, rates: result.rates });

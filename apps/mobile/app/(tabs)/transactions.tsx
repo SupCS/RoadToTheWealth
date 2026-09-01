@@ -94,7 +94,13 @@ export default function TransactionsScreen() {
                 <Text style={[styles.transactionTitle, { color: theme.text }]}>{transaction.description || t(transactionTypeKey[transaction.transactionType])}</Text>
                 <Text style={[styles.meta, { color: theme.muted }]}>{account?.name ?? t('unknownAccount')}{transaction.status === 'fx_pending' ? ` · ${t('fxPending')}` : ''}</Text>
               </View>
-              <MoneyText locale={locale} tone={tone} value={transaction.originalAmount} variant="metric" />
+              <View style={styles.amounts}>
+                <MoneyText locale={locale} tone={tone} value={transaction.originalAmount} variant="metric" />
+                {transaction.reportingAmount && transaction.reportingAmount.currency !== transaction.originalAmount.currency ? <>
+                  <Text style={[styles.convertedLabel, { color: theme.muted }]}>{t('convertedAmount')}</Text>
+                  <MoneyText locale={locale} tone={tone} value={transaction.reportingAmount} />
+                </> : null}
+              </View>
               {editable ? <Pressable accessibilityLabel={t('copyTransaction')} accessibilityRole="button" hitSlop={8} onPress={(event) => { event.stopPropagation(); router.push(`/transaction/new?copyId=${transaction.id}`); }} style={styles.iconButton}>
                 <MaterialCommunityIcons color={theme.primary} name="content-copy" size={20} />
               </Pressable> : null}
@@ -134,6 +140,8 @@ const styles = StyleSheet.create({
   date: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold, marginTop: spacing.sm },
   row: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
   details: { flex: 1 },
+  amounts: { alignItems: 'flex-end' },
+  convertedLabel: { fontSize: fontSizes.label, marginTop: spacing.xs },
   transactionTitle: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },
   meta: { fontSize: fontSizes.caption, marginTop: spacing.xs },
   deleteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 44 },
