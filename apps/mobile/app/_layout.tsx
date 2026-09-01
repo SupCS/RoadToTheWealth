@@ -3,6 +3,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 
 import { DATABASE_NAME, migrateDatabase } from '@/src/data/database/migrations';
+import { PendingFxRefresher } from '@/src/fx/pending-fx-refresher';
 import { SettingsProvider, useSettings } from '@/src/settings/settings-context';
 
 function RootNavigator() {
@@ -29,6 +30,7 @@ export default function RootLayout() {
   return (
     <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrateDatabase}>
       <SettingsProvider>
+        <PendingFxRefresher />
         <RootNavigator />
       </SettingsProvider>
     </SQLiteProvider>

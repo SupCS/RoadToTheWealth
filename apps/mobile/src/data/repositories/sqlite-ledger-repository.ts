@@ -429,6 +429,20 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     return rows.map(mapTransaction);
   }
 
+  async completePendingFx(transactionId: string, reportingAmount: Money, fxSnapshot: NonNullable<Transaction['fxSnapshot']>, updatedAt: string): Promise<boolean> {
+    const result = await this.db.runAsync(
+      `UPDATE transactions SET status = 'confirmed', reporting_amount_minor = ?, reporting_currency_code = ?,
+        fx_rate_decimal = ?, fx_provider = ?, fx_requested_date = ?, fx_effective_date = ?,
+        updated_at = ?, revision = revision + 1
+      WHERE id = ? AND status = 'fx_pending' AND deleted_at IS NULL
+        AND reporting_amount_minor IS NULL AND fx_rate_decimal IS NULL`,
+      reportingAmount.amountMinor.toString(), reportingAmount.currency,
+      fxSnapshot.rateDecimal, fxSnapshot.provider, fxSnapshot.requestedDate, fxSnapshot.effectiveDate,
+      updatedAt, transactionId,
+    );
+    return result.changes === 1;
+  }
+
   async softDeleteTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void> {
     const linkedIdsSql = `SELECT debit_transaction_id FROM transfer_links WHERE deleted_at IS NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)
       UNION SELECT credit_transaction_id FROM transfer_links WHERE deleted_at IS NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)

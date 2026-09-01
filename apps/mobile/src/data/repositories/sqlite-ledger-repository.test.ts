@@ -23,6 +23,17 @@ const audit = {
 } as const;
 
 describe('SQLiteLedgerRepository', () => {
+  it('completes only a still-pending FX row', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+    await expect(repository.completePendingFx('transaction-1', money(-2700n, 'GEL'), {
+      rateDecimal: '2.7', provider: 'frankfurter', requestedDate: '2026-08-30', effectiveDate: '2026-08-28',
+    }, '2026-09-01T00:00:00.000Z')).resolves.toBe(true);
+    expect(db.runAsync.mock.calls[0]?.[0]).toContain("status = 'confirmed'");
+    expect(db.runAsync.mock.calls[0]?.[0]).toContain("status = 'fx_pending'");
+    expect(db.runAsync.mock.calls[0]?.flat()).toContain('-2700');
+  });
+
   it('binds minor units as a decimal string without converting through number', async () => {
     const db = createDatabase();
     const repository = new SQLiteLedgerRepository(db as never);

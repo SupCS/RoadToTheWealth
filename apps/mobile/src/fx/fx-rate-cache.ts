@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
+import type { MoneyCurrencyCode } from '../domain/money/currencies';
 
 export type FxRateSnapshot = Readonly<{
   base: MoneyCurrencyCode;

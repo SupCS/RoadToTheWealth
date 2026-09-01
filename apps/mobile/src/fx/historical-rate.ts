@@ -1,8 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
-import { getHistoricalRateOnOrBefore } from '@/src/fx/frankfurter';
-import { SQLiteFxRateCache, type FxRateSnapshot } from '@/src/fx/fx-rate-cache';
+import type { MoneyCurrencyCode } from '../domain/money/currencies';
+import { SQLiteFxRateCache, type FxRateSnapshot } from './fx-rate-cache';
+import { getHistoricalRateOnOrBefore } from './frankfurter';
 
 const PROVIDER = 'frankfurter';
 

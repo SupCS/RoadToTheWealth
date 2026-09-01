@@ -113,6 +113,7 @@ export interface LedgerRepository {
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
   getTransaction(transactionId: string): Promise<TransactionDetails | null>;
   listTransactions(householdId: string): Promise<Transaction[]>;
+  completePendingFx(transactionId: string, reportingAmount: Money, fxSnapshot: NonNullable<Transaction['fxSnapshot']>, updatedAt: string): Promise<boolean>;
   softDeleteTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void>;
   restoreTransaction(transactionId: string, updatedAt: string, updatedByMemberId: string): Promise<void>;
   saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void>;

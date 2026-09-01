@@ -9,6 +9,7 @@ import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-re
 import { AppTextField, Card, EmptyState, ErrorState, LoadingState, MoneyText, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import { formatDate } from '@/src/i18n/formatters';
+import { deriveReportingAmounts } from '@/src/fx/reporting-amounts';
 import { useSettings } from '@/src/settings/settings-context';
 
 type LoadState =
@@ -19,13 +20,14 @@ type LoadState =
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
   const repository = useMemo(() => new SQLiteLedgerRepository(db), [db]);
-  const { locale, t, theme } = useSettings();
+  const { baseCurrency, locale, t, theme } = useSettings();
   const router = useRouter();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income' | 'transfer'>('all');
   const [accountFilter, setAccountFilter] = useState('all');
   const [lastDeletedId, setLastDeletedId] = useState<string | null>(null);
+  const [reportingAmounts, setReportingAmounts] = useState<Record<string, Transaction['originalAmount']>>({});
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -39,10 +41,12 @@ export default function TransactionsScreen() {
         repository.listAccounts(household.id), repository.getActiveMember(household.id), repository.listTransactions(household.id),
       ]);
       setState({ status: 'ready', accounts, memberId: member?.id ?? null, transactions });
+      setReportingAmounts({});
+      void deriveReportingAmounts(db, transactions, baseCurrency).then(setReportingAmounts).catch(() => undefined);
     } catch {
       setState({ status: 'error' });
     }
-  }, [repository]);
+  }, [baseCurrency, db, repository]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
@@ -69,6 +73,7 @@ export default function TransactionsScreen() {
         </Pressable>
       </View> : null}
       {state.status === 'ready' && state.transactions.length > 0 ? <>
+        <Text style={[styles.reportingCurrency, { color: theme.muted }]}>{t('reportingCurrency')}: {baseCurrency}</Text>
         <AppTextField label={t('searchTransactions')} onChangeText={setQuery} value={query} />
         <FilterChoices label={t('transactionType')} options={[{ label: t('all'), value: 'all' }, { label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('transfer'), value: 'transfer' }]} selected={typeFilter} onSelect={(value) => setTypeFilter(value as typeof typeFilter)} />
         <FilterChoices label={t('account')} options={[{ label: t('all'), value: 'all' }, ...state.accounts.map((account) => ({ label: account.name, value: account.id }))]} selected={accountFilter} onSelect={setAccountFilter} />
@@ -87,6 +92,7 @@ export default function TransactionsScreen() {
           const account = state.accounts.find((candidate) => candidate.id === transaction.accountId);
           const tone = transaction.originalAmount.amountMinor < 0n ? 'danger' : 'positive';
           const editable = transaction.transactionType === 'expense' || transaction.transactionType === 'income';
+          const reportingAmount = reportingAmounts[transaction.id];
           return <Pressable disabled={!editable} key={transaction.id} onPress={() => router.push(`/transaction/new?id=${transaction.id}`)} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
           <Card>
             <View style={styles.row}>
@@ -96,9 +102,9 @@ export default function TransactionsScreen() {
               </View>
               <View style={styles.amounts}>
                 <MoneyText locale={locale} tone={tone} value={transaction.originalAmount} variant="metric" />
-                {transaction.reportingAmount && transaction.reportingAmount.currency !== transaction.originalAmount.currency ? <>
+                {reportingAmount && reportingAmount.currency !== transaction.originalAmount.currency ? <>
                   <Text style={[styles.convertedLabel, { color: theme.muted }]}>{t('convertedAmount')}</Text>
-                  <MoneyText locale={locale} tone={tone} value={transaction.reportingAmount} />
+                  <MoneyText locale={locale} tone={tone} value={reportingAmount} />
                 </> : null}
               </View>
               {editable ? <Pressable accessibilityLabel={t('copyTransaction')} accessibilityRole="button" hitSlop={8} onPress={(event) => { event.stopPropagation(); router.push(`/transaction/new?copyId=${transaction.id}`); }} style={styles.iconButton}>
@@ -142,6 +148,7 @@ const styles = StyleSheet.create({
   details: { flex: 1 },
   amounts: { alignItems: 'flex-end' },
   convertedLabel: { fontSize: fontSizes.label, marginTop: spacing.xs },
+  reportingCurrency: { fontSize: fontSizes.caption, marginBottom: spacing.md },
   transactionTitle: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },
   meta: { fontSize: fontSizes.caption, marginTop: spacing.xs },
   deleteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 44 },
