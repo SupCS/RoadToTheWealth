@@ -12,8 +12,9 @@ For a transaction whose original currency differs from the household reporting c
 
 1. Reuse an exact SQLite snapshot for the currency pair and requested transaction date.
 2. Otherwise request Frankfurter history and select the latest published rate whose date is not later than the transaction date. The ten-day lookback covers ordinary weekends and bank-holiday runs.
-3. Persist the requested date, effective publication date, decimal rate, provider, and fetch timestamp in SQLite.
-4. If neither the cache nor network can provide a rate, save the original transaction unchanged with `fx_pending`. A later checklist item will add automatic retry and manual-rate entry.
+3. If Frankfurter is unreachable, use the official National Bank of Georgia JSON rates and cross-convert through GEL. NBG also resolves a weekend request to the preceding published banking date.
+4. Persist the requested date, effective publication date, decimal rate, provider, and fetch timestamp in SQLite.
+5. If neither the cache nor network can provide a rate, save the original transaction unchanged with `fx_pending`.
 
 The transaction stores its own FX snapshot and reporting amount. Subsequent market-rate updates must never rewrite that snapshot or the original amount.
 

@@ -1,26 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { getLatestRates, getRateHistory, type FxRate } from '@/src/fx/frankfurter';
+import { FxRatesError, getLatestRates, getRateHistory, type FxRate } from '@/src/fx/frankfurter';
 import type { CurrencyCode } from '@/src/settings/settings-context';
 
 type LatestState = {
   error: boolean;
+  errorDetail: string | null;
   fetchedAt: string | null;
+  frankfurterError: string | null;
   loading: boolean;
   rates: FxRate[];
 };
 
 export function useLatestRates(base: CurrencyCode, quotes: CurrencyCode[]) {
-  const [state, setState] = useState<LatestState>({ error: false, fetchedAt: null, loading: true, rates: [] });
+  const [state, setState] = useState<LatestState>({ error: false, errorDetail: null, fetchedAt: null, frankfurterError: null, loading: true, rates: [] });
   const quoteKey = quotes.join(',');
 
   const refresh = useCallback(async () => {
-    setState({ error: false, fetchedAt: null, loading: true, rates: [] });
+    setState({ error: false, errorDetail: null, fetchedAt: null, frankfurterError: null, loading: true, rates: [] });
     try {
       const result = await getLatestRates(base, quotes);
-      setState({ error: false, fetchedAt: result.fetchedAt, loading: false, rates: result.rates });
-    } catch {
-      setState((current) => ({ ...current, error: true, loading: false }));
+      setState({ error: false, errorDetail: null, fetchedAt: result.fetchedAt, frankfurterError: result.frankfurterError ?? null, loading: false, rates: result.rates });
+    } catch (error) {
+      const detail = error instanceof FxRatesError
+        ? `Frankfurter: ${error.frankfurterError}; NBG: ${error.fallbackError}`
+        : error instanceof Error ? error.message : 'Unknown error';
+      setState((current) => ({ ...current, error: true, errorDetail: detail, loading: false }));
     }
   }, [base, quoteKey]); // eslint-disable-line react-hooks/exhaustive-deps
 

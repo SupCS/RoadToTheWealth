@@ -17,7 +17,7 @@ export function RatesWidget() {
     t,
     theme,
   } = useSettings();
-  const { error, fetchedAt, loading, rates, refresh } = useLatestRates(baseCurrency, enabledCurrencies);
+  const { error, errorDetail, fetchedAt, frankfurterError, loading, rates, refresh } = useLatestRates(baseCurrency, enabledCurrencies);
 
   return (
     <View>
@@ -31,6 +31,7 @@ export function RatesWidget() {
       <Card>
         {loading ? <LoadingState label={t('loading')} /> : null}
         {!loading && error && rates.length === 0 ? <ErrorState message={t('ratesUnavailable')} onRetry={() => void refresh()} retryLabel={t('retry')} /> : null}
+        {!loading && errorDetail ? <Text selectable style={[styles.diagnostic, { color: theme.danger }]}>{t('fxDiagnostic')}: {errorDetail}</Text> : null}
         {!loading && !error && enabledCurrencies.filter((code) => code !== baseCurrency).length === 0 ? <Text style={[styles.message, { color: theme.muted }]}>{t('noCurrencies')}</Text> : null}
         {rates.map((item, index) => {
           const inverted = isPairInverted(baseCurrency, item.quote as typeof baseCurrency);
@@ -53,6 +54,8 @@ export function RatesWidget() {
           );
         })}
         {rates.length > 0 ? <Text style={[styles.hint, { color: theme.muted }]}>{t('ratesHint')}</Text> : null}
+        {rates.length > 0 ? <Text style={[styles.diagnostic, { color: theme.muted }]}>{t('fxSource')}: {rates[0]?.provider === 'nbg' ? 'NBG' : 'Frankfurter'}</Text> : null}
+        {frankfurterError ? <Text selectable style={[styles.diagnostic, { color: theme.muted }]}>{t('fxFrankfurterIssue')}: {frankfurterError}</Text> : null}
         {fetchedAt ? <Text style={[styles.updated, { color: theme.muted }]}>{t('updated')}: {formatDateTime(fetchedAt, locale)}</Text> : null}
       </Card>
     </View>
@@ -71,5 +74,6 @@ const styles = StyleSheet.create({
   value: { fontSize: 17, fontVariant: ['tabular-nums'], fontWeight: '700' },
   hint: { fontSize: 12, marginTop: 10 },
   updated: { fontSize: 10, marginTop: 5 },
+  diagnostic: { fontSize: 10, lineHeight: 15, marginTop: 5 },
   message: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
 });
