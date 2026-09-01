@@ -15,7 +15,7 @@ Road To The Wealth is a private household finance application for two people. It
 
 ## 3. Household and identity
 
-- A user creates a household and invites one partner.
+- On first local use, the app automatically creates the household data container and current local member so personal money workflows are immediately available offline. Inviting a partner remains explicit.
 - Accounts may be personal or shared.
 - No shared account is created automatically. A user may create multiple personal and shared accounts, and each account becomes shared only after an explicit choice during creation or editing.
 - Household members can see shared data; personal-account visibility will be a configurable later policy.

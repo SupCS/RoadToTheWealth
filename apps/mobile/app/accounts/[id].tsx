@@ -11,6 +11,7 @@ import type { Account } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { parseMajorAmount, toMajorAmountInput } from '@/src/domain/money/money';
 import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
+import { ensureLocalLedgerContext } from '@/src/domain/household/ensure-local-context';
 import { currencyCatalog, useSettings } from '@/src/settings/settings-context';
 
 type AccountType = Account['accountType'];
@@ -39,11 +40,14 @@ export default function AccountEditorScreen() {
     async function load() {
       try {
         const existing = isNew ? null : await repository.getAccount(id);
-        const household = existing
-          ? { id: existing.householdId }
-          : await repository.getActiveHousehold();
+        const context = existing
+          ? null
+          : await ensureLocalLedgerContext(repository, {
+            baseCurrency, createId: Crypto.randomUUID, now: () => new Date().toISOString(),
+          });
+        const household = context?.household ?? await repository.getActiveHousehold();
         if (!household) throw new Error('Household missing');
-        const member = await repository.getActiveMember(household.id);
+        const member = context?.member ?? await repository.getActiveMember(household.id);
         if (!member) throw new Error('Member missing');
         setHouseholdId(household.id);
         setMemberId(member.id);
@@ -64,7 +68,7 @@ export default function AccountEditorScreen() {
       }
     }
     void load();
-  }, [id, isNew, repository]);
+  }, [baseCurrency, id, isNew, repository]);
 
   async function save() {
     const trimmedName = name.trim();
