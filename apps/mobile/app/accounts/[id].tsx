@@ -28,9 +28,8 @@ export default function AccountEditorScreen() {
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [amount, setAmount] = useState('0');
-  const [currency, setCurrency] = useState<MoneyCurrencyCode>(baseCurrency);
   const [balanceInputs, setBalanceInputs] = useState<Partial<Record<MoneyCurrencyCode, string>>>({ [baseCurrency]: '0' });
+  const [primaryCurrency, setPrimaryCurrency] = useState<MoneyCurrencyCode>(baseCurrency);
   const [ownershipScope, setOwnershipScope] = useState<Account['ownershipScope']>('personal');
   const [accountType, setAccountType] = useState<AccountType>('current');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -55,10 +54,8 @@ export default function AccountEditorScreen() {
           setAccount(existing);
           setName(existing.name);
           const inputs = Object.fromEntries(existing.openingBalances.map((balance) => [balance.currency, toMajorAmountInput(balance)]));
-          const first = existing.openingBalances[0]!;
           setBalanceInputs(inputs);
-          setAmount(toMajorAmountInput(first));
-          setCurrency(first.currency);
+          setPrimaryCurrency(existing.primaryCurrency);
           setOwnershipScope(existing.ownershipScope);
           setAccountType(existing.accountType);
         }
@@ -76,13 +73,14 @@ export default function AccountEditorScreen() {
       setValidationError(t('accountNameRequired'));
       return;
     }
-    let openingBalances;
-    try {
-      openingBalances = Object.entries({ ...balanceInputs, [currency]: amount }).map(([code, value]) =>
-        parseMajorAmount(value ?? '0', code as MoneyCurrencyCode));
-    } catch {
-      setValidationError(t('invalidAmount'));
-      return;
+    const openingBalances = [];
+    for (const [code, value] of Object.entries(balanceInputs)) {
+      try {
+        openingBalances.push(parseMajorAmount(value ?? '', code as MoneyCurrencyCode));
+      } catch {
+        setValidationError(`${t('invalidAmount')} (${code})`);
+        return;
+      }
     }
     if (!householdId || !memberId) return;
     setValidationError(null);
@@ -96,6 +94,7 @@ export default function AccountEditorScreen() {
         ownerMemberId: ownershipScope === 'personal' ? memberId : null,
         name: trimmedName,
         accountType,
+        primaryCurrency,
         openingBalances,
         isArchived: account?.isArchived ?? false,
         createdAt: account?.createdAt ?? now,
@@ -106,9 +105,10 @@ export default function AccountEditorScreen() {
         deletedAt: null,
       });
       router.replace('/accounts' as Href);
-    } catch {
+    } catch (error) {
       setStatus('ready');
-      setValidationError(t('accountSaveError'));
+      setValidationError(error instanceof Error && error.message.includes('transaction history')
+        ? t('currencyHasTransactions') : t('accountSaveError'));
     }
   }
 
@@ -138,13 +138,35 @@ export default function AccountEditorScreen() {
       </Pressable>
       <ScreenHeader title={isNew ? t('newAccount') : t('editAccount')} />
       <AppTextField label={t('accountName')} onChangeText={setName} value={name} />
-      <ChoiceGroup label={t('accountCurrencies')} options={currencyCatalog.map((value) => ({ label: `${balanceInputs[value] !== undefined ? '✓ ' : ''}${value}`, value }))} selected={currency} onSelect={(value) => {
-        const next = value as MoneyCurrencyCode;
-        setBalanceInputs((current) => ({ ...current, [currency]: amount, [next]: current[next] ?? '0' }));
-        setCurrency(next);
-        setAmount(balanceInputs[next] ?? '0');
-      }} />
-      <AppTextField keyboardType="decimal-pad" label={`${t('openingBalance')} · ${currency}`} onChangeText={setAmount} value={amount} />
+      <MultiChoiceGroup
+        label={t('accountCurrencies')}
+        options={currencyCatalog.map((value) => ({ label: value, value }))}
+        selected={Object.keys(balanceInputs)}
+        onSelect={(value) => setBalanceInputs((current) => {
+          const code = value as MoneyCurrencyCode;
+          if (current[code] === undefined) return { ...current, [code]: '0' };
+          if (Object.keys(current).length === 1) return current;
+          const next = { ...current };
+          delete next[code];
+          if (primaryCurrency === code) setPrimaryCurrency(Object.keys(next)[0] as MoneyCurrencyCode);
+          return next;
+        })}
+      />
+      {(Object.keys(balanceInputs) as MoneyCurrencyCode[]).map((code) => (
+        <AppTextField
+          key={code}
+          keyboardType="decimal-pad"
+          label={`${t('openingBalance')} · ${code}`}
+          onChangeText={(value) => setBalanceInputs((current) => ({ ...current, [code]: value }))}
+          value={balanceInputs[code] ?? ''}
+        />
+      ))}
+      <ChoiceGroup
+        label={t('primaryAccountCurrency')}
+        options={(Object.keys(balanceInputs) as MoneyCurrencyCode[]).map((value) => ({ label: value, value }))}
+        selected={primaryCurrency}
+        onSelect={(value) => setPrimaryCurrency(value as MoneyCurrencyCode)}
+      />
       <ChoiceGroup label={t('ownership')} options={[
         { label: t('personalAccount'), value: 'personal' }, { label: t('sharedAccount'), value: 'shared' },
       ]} selected={ownershipScope} onSelect={(value) => setOwnershipScope(value as Account['ownershipScope'])} />
@@ -175,6 +197,25 @@ function ChoiceGroup({ label, onSelect, options, selected }: {
   </View>;
 }
 
+function MultiChoiceGroup({ label, onSelect, options, selected }: {
+  label: string; onSelect: (value: string) => void; options: { label: string; value: string }[]; selected: string[];
+}) {
+  const { t, theme } = useSettings();
+  return <View style={styles.group}>
+    <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
+    <Text style={[styles.choiceHint, { color: theme.muted }]}>{t('accountCurrenciesHint')}</Text>
+    <View style={styles.choices}>{options.map((option) => {
+      const active = selected.includes(option.value);
+      return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: active }} key={option.value} onPress={() => onSelect(option.value)} style={[styles.choice, { backgroundColor: active ? theme.primary : theme.surface, borderColor: active ? theme.primary : theme.border }]}>
+        <View style={styles.choiceContent}>
+          {active ? <MaterialCommunityIcons color={theme.onPrimary} name="check" size={18} /> : null}
+          <Text style={[styles.choiceLabel, { color: active ? theme.onPrimary : theme.text }]}>{option.label}</Text>
+        </View>
+      </Pressable>;
+    })}</View>
+  </View>;
+}
+
 const accountTypeKey = {
   cash: 'accountTypeCash', debit_card: 'accountTypeDebitCard', credit_card: 'accountTypeCreditCard', current: 'accountTypeCurrent',
   savings: 'accountTypeSavings', deposit: 'accountTypeDeposit', investment: 'accountTypeInvestment', debt: 'accountTypeDebt',
@@ -189,6 +230,8 @@ const styles = StyleSheet.create({
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: { borderRadius: radii.lg, borderWidth: 1, minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  choiceContent: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
+  choiceHint: { fontSize: fontSizes.caption, lineHeight: 18 },
   error: { fontSize: fontSizes.body, marginVertical: spacing.md },
   archiveButton: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, marginTop: spacing.lg, minHeight: 48, justifyContent: 'center', padding: spacing.md },
   archiveLabel: { fontSize: fontSizes.button, fontWeight: fontWeights.extraBold },

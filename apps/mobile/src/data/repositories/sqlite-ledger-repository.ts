@@ -23,6 +23,7 @@ type AccountRow = {
   owner_member_id: string | null;
   name: string;
   account_type: Account['accountType'];
+  primary_currency_code: MoneyCurrencyCode | null;
   opening_balance_minor: string;
   currency_code: MoneyCurrencyCode;
   is_archived: number;
@@ -158,14 +159,25 @@ export class SQLiteLedgerRepository implements LedgerRepository {
 
   async saveAccount(value: Account): Promise<void> {
     assertOpeningBalances(value.openingBalances);
+    if (!value.openingBalances.some((balance) => balance.currency === value.primaryCurrency)) {
+      throw new Error('Primary currency must belong to the account');
+    }
+    const usedCurrencies = await this.db.getAllAsync<{ currency_code: MoneyCurrencyCode }>(
+      `SELECT DISTINCT currency_code FROM transactions
+      WHERE account_id = ? AND deleted_at IS NULL`, value.id,
+    );
+    const selectedCurrencies = new Set(value.openingBalances.map((balance) => balance.currency));
+    if (usedCurrencies.some((row) => !selectedCurrencies.has(row.currency_code))) {
+      throw new Error('A currency with transaction history cannot be removed');
+    }
     await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
       const legacyBalance = value.openingBalances[0]!;
       await transactionDb.runAsync(
       `INSERT INTO accounts (
         id, household_id, ownership_scope, owner_member_id, name, account_type,
-        currency_code, opening_balance_minor, is_archived, created_at, updated_at,
+        currency_code, opening_balance_minor, primary_currency_code, is_archived, created_at, updated_at,
         created_by_member_id, updated_by_member_id, revision, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         ownership_scope = excluded.ownership_scope,
         owner_member_id = excluded.owner_member_id,
@@ -173,6 +185,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         account_type = excluded.account_type,
         currency_code = excluded.currency_code,
         opening_balance_minor = excluded.opening_balance_minor,
+        primary_currency_code = excluded.primary_currency_code,
         is_archived = excluded.is_archived,
         updated_at = excluded.updated_at,
         updated_by_member_id = excluded.updated_by_member_id,
@@ -180,9 +193,14 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         deleted_at = excluded.deleted_at
       WHERE excluded.revision > accounts.revision`,
       value.id, value.householdId, value.ownershipScope, value.ownerMemberId, value.name,
-      value.accountType, legacyBalance.currency, legacyBalance.amountMinor.toString(),
+      value.accountType, legacyBalance.currency, legacyBalance.amountMinor.toString(), value.primaryCurrency,
       value.isArchived ? 1 : 0, value.createdAt, value.updatedAt, value.createdByMemberId,
       value.updatedByMemberId, value.revision, value.deletedAt,
+      );
+      const placeholders = value.openingBalances.map(() => '?').join(', ');
+      await transactionDb.runAsync(
+        `DELETE FROM account_currency_balances WHERE account_id = ? AND currency_code NOT IN (${placeholders})`,
+        value.id, ...value.openingBalances.map((balance) => balance.currency),
       );
       for (const balance of value.openingBalances) {
         await transactionDb.runAsync(
@@ -203,7 +221,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
   async getAccount(accountId: string): Promise<Account | null> {
     const row = await this.db.getFirstAsync<AccountRow>(
       `SELECT id, household_id, ownership_scope, owner_member_id, name, account_type,
-        CAST(opening_balance_minor AS TEXT) AS opening_balance_minor, currency_code,
+        CAST(opening_balance_minor AS TEXT) AS opening_balance_minor, currency_code, primary_currency_code,
         is_archived, created_at, updated_at, created_by_member_id,
         updated_by_member_id, revision, deleted_at
       FROM accounts WHERE id = ? AND deleted_at IS NULL`,
@@ -225,7 +243,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
   async listAccounts(householdId: string): Promise<Account[]> {
     const rows = await this.db.getAllAsync<AccountRow>(
       `SELECT id, household_id, ownership_scope, owner_member_id, name, account_type,
-        CAST(opening_balance_minor AS TEXT) AS opening_balance_minor, currency_code,
+        CAST(opening_balance_minor AS TEXT) AS opening_balance_minor, currency_code, primary_currency_code,
         is_archived, created_at, updated_at, created_by_member_id,
         updated_by_member_id, revision, deleted_at
       FROM accounts
@@ -422,6 +440,7 @@ function mapAccount(row: AccountRow, openingBalances: Money[]): Account {
     ownerMemberId: row.owner_member_id,
     name: row.name,
     accountType: row.account_type,
+    primaryCurrency: row.primary_currency_code ?? row.currency_code,
     openingBalances,
     isArchived: row.is_archived === 1,
     createdAt: row.created_at,

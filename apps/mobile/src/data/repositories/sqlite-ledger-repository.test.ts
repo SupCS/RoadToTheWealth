@@ -29,7 +29,7 @@ describe('SQLiteLedgerRepository', () => {
     await repository.saveAccount({
       id: 'account-1', householdId: 'household-1', ownershipScope: 'personal',
       ownerMemberId: 'member-1', name: 'Savings', accountType: 'savings',
-      openingBalances: [money(9_007_199_254_740_993n, 'USD')], isArchived: false,
+      primaryCurrency: 'USD', openingBalances: [money(9_007_199_254_740_993n, 'USD')], isArchived: false,
       ...audit,
     });
 
@@ -56,11 +56,11 @@ describe('SQLiteLedgerRepository', () => {
     await repository.saveAccount({
       id: 'account-1', householdId: 'household-1', ownershipScope: 'personal',
       ownerMemberId: 'member-1', name: 'Wallet', accountType: 'current',
-      openingBalances: [money(1000n, 'USD'), money(2500n, 'GEL')], isArchived: false,
+      primaryCurrency: 'USD', openingBalances: [money(1000n, 'USD'), money(2500n, 'GEL')], isArchived: false,
       ...audit,
     });
 
-    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(3);
+    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(4);
     expect(db.transactionDb.runAsync.mock.calls.flat()).toContain('USD');
     expect(db.transactionDb.runAsync.mock.calls.flat()).toContain('GEL');
   });
@@ -72,7 +72,7 @@ describe('SQLiteLedgerRepository', () => {
     await expect(repository.saveAccount({
       id: 'account-1', householdId: 'household-1', ownershipScope: 'personal',
       ownerMemberId: 'member-1', name: 'Wallet', accountType: 'current',
-      openingBalances: [money(1000n, 'USD'), money(2000n, 'USD')], isArchived: false,
+      primaryCurrency: 'USD', openingBalances: [money(1000n, 'USD'), money(2000n, 'USD')], isArchived: false,
       ...audit,
     })).rejects.toThrow('unique');
     expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();

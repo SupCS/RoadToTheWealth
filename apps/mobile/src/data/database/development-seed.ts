@@ -40,9 +40,9 @@ export async function seedDevelopmentData(
     await transaction.runAsync(
       `INSERT INTO accounts (
         id, household_id, ownership_scope, owner_member_id, name, account_type,
-        currency_code, opening_balance_minor, is_archived, created_at, updated_at,
+        currency_code, opening_balance_minor, primary_currency_code, is_archived, created_at, updated_at,
         created_by_member_id, updated_by_member_id, revision, deleted_at
-      ) VALUES (?, ?, 'personal', ?, ?, 'current', 'USD', 0, 0, ?, ?, ?, ?, 1, NULL)`,
+      ) VALUES (?, ?, 'personal', ?, ?, 'current', 'USD', 0, 'USD', 0, ?, ?, ?, ?, 1, NULL)`,
       '20000000-0000-4000-8000-000000000003',
       '20000000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000002',

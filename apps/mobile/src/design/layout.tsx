@@ -18,12 +18,15 @@ export function Screen({ children }: PropsWithChildren) {
   );
 }
 
-export function ScreenHeader({ eyebrow, title }: { eyebrow?: string; title: string }) {
+export function ScreenHeader({ action, eyebrow, title }: { action?: ReactNode; eyebrow?: string; title: string }) {
   const { theme } = useSettings();
   return (
     <View style={styles.header}>
       {eyebrow ? <Text style={[styles.eyebrow, { color: theme.primary }]}>{eyebrow}</Text> : null}
-      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+      <View style={styles.titleRow}>
+        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+        {action}
+      </View>
     </View>
   );
 }
@@ -147,7 +150,8 @@ const styles = StyleSheet.create({
   screen: { flexGrow: 1, paddingBottom: spacing.huge, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   header: { marginBottom: spacing.xxl },
   eyebrow: { fontSize: 13, fontWeight: fontWeights.black, letterSpacing: 3, marginBottom: spacing.xs },
-  title: { fontSize: fontSizes.title, fontWeight: fontWeights.extraBold, letterSpacing: -0.9, lineHeight: lineHeights.title },
+  title: { flex: 1, fontSize: fontSizes.title, fontWeight: fontWeights.extraBold, letterSpacing: -0.9, lineHeight: lineHeights.title },
+  titleRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
   card: { borderRadius: radii.xl, borderWidth: 1, padding: spacing.xl },
   emptyIcon: { alignItems: 'center', marginBottom: spacing.md },
   emptyTitle: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold, marginBottom: spacing.sm, textAlign: 'center' },

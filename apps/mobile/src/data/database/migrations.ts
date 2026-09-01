@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 5;
+export const DATABASE_VERSION = 6;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -245,6 +245,13 @@ const migrations = [
 
       CREATE INDEX account_currency_balances_currency_idx
         ON account_currency_balances(currency_code, account_id);
+    `,
+  },
+  {
+    version: 6,
+    sql: `
+      ALTER TABLE accounts ADD COLUMN primary_currency_code TEXT;
+      UPDATE accounts SET primary_currency_code = currency_code WHERE primary_currency_code IS NULL;
     `,
   },
 ] as const;

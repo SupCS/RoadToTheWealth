@@ -30,6 +30,7 @@ export type Account = AuditFields & Readonly<{
   ownerMemberId: string | null;
   name: string;
   accountType: 'cash' | 'debit_card' | 'credit_card' | 'current' | 'savings' | 'deposit' | 'investment' | 'debt' | 'e_wallet' | 'custom';
+  primaryCurrency: MoneyCurrencyCode;
   openingBalances: Money[];
   isArchived: boolean;
 }>;

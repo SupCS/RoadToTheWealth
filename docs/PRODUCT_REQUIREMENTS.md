@@ -44,7 +44,7 @@ Transfers link two legs and do not affect income/expense reports. They preserve 
 
 ## 5. Multi-currency behavior
 
-- An account may hold balances in multiple enabled currencies; transactions retain their original currency and affect the matching currency balance inside the account.
+- An account may hold balances in multiple enabled currencies and has one explicitly selected primary currency. Transactions retain their original currency and affect the matching currency balance inside the account. A derived account total may be shown in the primary currency only when every required current or cached rate is available, with the rate freshness made clear.
 - A household has a base reporting currency, switchable without rewriting history.
 - Users may temporarily display reports in any enabled currency.
 - Historical rate is selected by transaction/posting date. On a non-publishing day, use the latest available rate on or before that date.
@@ -99,7 +99,7 @@ A roadmap is an ordered/dependent set of goals, for example: repay expensive deb
 ## 10. Dashboard and reports
 
 - Household balance and current-user balance are separate financial scopes throughout the product, not merely two labels for the same total. Household balance aggregates all household-visible accounts once; current-user balance aggregates only accounts personally owned by that user. Shared accounts belong to the household balance and are not silently included in the personal balance.
-- The dashboard presents household balance and current-user balance as separate widgets. Reports, filters, budgets, goals, and derived totals must preserve the selected scope and label it explicitly.
+- The dashboard presents household balance and current-user balance as separate scopes. Until at least one active shared account exists, only the personal widget is shown; the technical household data container alone must not create a duplicate-looking household balance. Reports, filters, budgets, goals, and derived totals must preserve the selected scope and label it explicitly.
 - Net worth, available cash, monthly income/expense, remaining budget, nearest goal, and recent activity.
 - Configurable exchange-rate widget showing the household base currency against globally enabled currencies.
 - Opening a currency pair shows its current value and historical movement; the initial view covers 30 days and may later support selectable periods.

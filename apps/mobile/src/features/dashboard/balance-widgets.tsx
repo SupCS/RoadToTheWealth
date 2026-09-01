@@ -13,7 +13,7 @@ import { useSettings } from '../../settings/settings-context';
 type BalanceState =
   | { status: 'loading' }
   | { status: 'error' }
-  | { status: 'ready'; household: Money[]; personal: Money[] };
+  | { status: 'ready'; hasSharedAccounts: boolean; household: Money[]; personal: Money[] };
 
 export function BalanceWidgets() {
   const db = useSQLiteContext();
@@ -26,17 +26,18 @@ export function BalanceWidgets() {
     try {
       const household = await repository.getActiveHousehold();
       if (!household) {
-        setState({ status: 'ready', household: [], personal: [] });
+        setState({ status: 'ready', hasSharedAccounts: false, household: [], personal: [] });
         return;
       }
       const member = await repository.getActiveMember(household.id);
-      const [householdBalances, personalBalances] = await Promise.all([
+      const [accounts, householdBalances, personalBalances] = await Promise.all([
+        repository.listAccounts(household.id),
         repository.getBalances({ kind: 'household', householdId: household.id }),
         member
           ? repository.getBalances({ kind: 'personal', householdId: household.id, memberId: member.id })
           : Promise.resolve([]),
       ]);
-      setState({ status: 'ready', household: householdBalances, personal: personalBalances });
+      setState({ status: 'ready', hasSharedAccounts: accounts.some((account) => account.ownershipScope === 'shared' && !account.isArchived), household: householdBalances, personal: personalBalances });
     } catch {
       setState({ status: 'error' });
     }
@@ -55,13 +56,13 @@ export function BalanceWidgets() {
 
   return (
     <View style={styles.widgets}>
-      <BalanceCard
+      {state.hasSharedAccounts ? <BalanceCard
         balances={state.household}
         description={t('householdBalanceHint')}
         icon="account-group-outline"
         locale={locale}
         title={t('householdBalance')}
-      />
+      /> : null}
       <BalanceCard
         balances={state.personal}
         description={t('personalBalanceHint')}
