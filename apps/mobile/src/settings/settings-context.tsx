@@ -8,14 +8,17 @@ const SETTINGS_KEY = 'rttw.preferences.v1';
 
 export const currencyCatalog = ['GEL', 'USD', 'EUR', 'UAH', 'GBP', 'TRY', 'PLN', 'CHF', 'RUB'] as const;
 export type CurrencyCode = (typeof currencyCatalog)[number];
+export type FinancialScope = 'personal' | 'household';
 
 type SettingsContextValue = {
   isReady: boolean;
   baseCurrency: CurrencyCode;
   enabledCurrencies: CurrencyCode[];
+  financialScope: FinancialScope;
   locale: Locale;
   setBaseCurrency: (currency: CurrencyCode) => void;
   setEnabledCurrencies: (currencies: CurrencyCode[]) => void;
+  setFinancialScope: (scope: FinancialScope) => void;
   setLocale: (locale: Locale) => void;
   setThemeId: (themeId: ThemeId) => void;
   isPairInverted: (base: CurrencyCode, quote: CurrencyCode) => boolean;
@@ -44,6 +47,7 @@ export function SettingsProvider({ children }: PropsWithChildren) {
   const [themeId, setThemeIdState] = useState<ThemeId>('wealth');
   const [baseCurrency, setBaseCurrency] = useState<CurrencyCode>('GEL');
   const [enabledCurrencies, setEnabledCurrencies] = useState<CurrencyCode[]>(['USD', 'EUR', 'UAH']);
+  const [financialScope, setFinancialScope] = useState<FinancialScope>('personal');
   const [invertedPairs, setInvertedPairs] = useState<string[]>([]);
   const [isReady, setIsReady] = useState(false);
 
@@ -54,10 +58,11 @@ export function SettingsProvider({ children }: PropsWithChildren) {
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
           if (parsed && typeof parsed === 'object') {
-            const settings = parsed as { baseCurrency?: unknown; enabledCurrencies?: unknown; invertedPairs?: unknown; locale?: unknown; themeId?: unknown };
+            const settings = parsed as { baseCurrency?: unknown; enabledCurrencies?: unknown; financialScope?: unknown; invertedPairs?: unknown; locale?: unknown; themeId?: unknown };
             if (isLocale(settings.locale)) setLocaleState(settings.locale);
             if (isThemeId(settings.themeId)) setThemeIdState(settings.themeId);
             if (isCurrencyCode(settings.baseCurrency)) setBaseCurrency(settings.baseCurrency);
+            if (settings.financialScope === 'personal' || settings.financialScope === 'household') setFinancialScope(settings.financialScope);
             if (Array.isArray(settings.enabledCurrencies)) {
               const validCurrencies = settings.enabledCurrencies.filter(isCurrencyCode);
               setEnabledCurrencies([...new Set(validCurrencies)]);
@@ -79,18 +84,20 @@ export function SettingsProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!isReady) return;
-    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ baseCurrency, enabledCurrencies, invertedPairs, locale, themeId }));
-  }, [baseCurrency, enabledCurrencies, invertedPairs, isReady, locale, themeId]);
+    void AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ baseCurrency, enabledCurrencies, financialScope, invertedPairs, locale, themeId }));
+  }, [baseCurrency, enabledCurrencies, financialScope, invertedPairs, isReady, locale, themeId]);
 
   const value = useMemo<SettingsContextValue>(() => {
     const theme = themes.find((item) => item.id === themeId) ?? themes[0]!;
     return {
       baseCurrency,
       enabledCurrencies,
+      financialScope,
       isReady,
       locale,
       setBaseCurrency,
       setEnabledCurrencies,
+      setFinancialScope,
       setLocale: setLocaleState,
       setThemeId: setThemeIdState,
       theme,
@@ -102,7 +109,7 @@ export function SettingsProvider({ children }: PropsWithChildren) {
         setInvertedPairs((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]);
       },
     };
-  }, [baseCurrency, enabledCurrencies, invertedPairs, isReady, locale, themeId]);
+  }, [baseCurrency, enabledCurrencies, financialScope, invertedPairs, isReady, locale, themeId]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

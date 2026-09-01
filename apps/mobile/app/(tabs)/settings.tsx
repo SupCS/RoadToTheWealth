@@ -9,9 +9,11 @@ export default function SettingsScreen() {
   const {
     baseCurrency,
     enabledCurrencies,
+    financialScope,
     locale,
     setBaseCurrency,
     setEnabledCurrencies,
+    setFinancialScope,
     setLocale,
     setThemeId,
     t,
@@ -62,6 +64,16 @@ export default function SettingsScreen() {
         ))}
       </View>
       <Text style={[styles.hint, { color: theme.muted }]}>{t('preferencesHint')}</Text>
+
+      <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('defaultFinancialScope')}</Text>
+      <View style={styles.wrap}>
+        {(['personal', 'household'] as const).map((scope) => <Pressable
+          accessibilityRole="radio" accessibilityState={{ checked: financialScope === scope }} key={scope}
+          onPress={() => setFinancialScope(scope)}
+          style={[styles.codePill, { backgroundColor: financialScope === scope ? theme.primary : theme.surface, borderColor: financialScope === scope ? theme.primary : theme.border }]}
+        ><Text style={[styles.codeText, { color: financialScope === scope ? theme.onPrimary : theme.text }]}>{t(scope === 'personal' ? 'personalScope' : 'householdScope')}</Text></Pressable>)}
+      </View>
+      <Text style={[styles.hint, { color: theme.muted }]}>{t('financialScopeHint')}</Text>
 
       <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('currencySettings')}</Text>
       <Text style={[styles.label, { color: theme.muted }]}>{t('baseCurrency')}</Text>

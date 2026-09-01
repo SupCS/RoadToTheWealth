@@ -252,6 +252,19 @@ describe('SQLiteLedgerRepository', () => {
     expect(db.transactionDb.runAsync.mock.calls[2]?.[0]).toContain('UPDATE transfer_links');
   });
 
+  it('restores a soft-deleted operation and its linked records atomically', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+
+    await repository.restoreTransaction('transaction-1', '2026-09-03T00:00:00.000Z', 'member-1');
+
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
+    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(3);
+    expect(db.transactionDb.runAsync.mock.calls[0]?.[0]).toContain('deleted_at = NULL');
+    expect(db.transactionDb.runAsync.mock.calls[1]?.[0]).toContain('UPDATE transaction_splits');
+    expect(db.transactionDb.runAsync.mock.calls[2]?.[0]).toContain('UPDATE transfer_links');
+  });
+
   it('archives only custom categories and their direct subcategories', async () => {
     const db = createDatabase();
     const repository = new SQLiteLedgerRepository(db as never);

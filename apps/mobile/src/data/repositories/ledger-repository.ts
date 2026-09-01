@@ -114,5 +114,6 @@ export interface LedgerRepository {
   getTransaction(transactionId: string): Promise<TransactionDetails | null>;
   listTransactions(householdId: string): Promise<Transaction[]>;
   softDeleteTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void>;
+  restoreTransaction(transactionId: string, updatedAt: string, updatedByMemberId: string): Promise<void>;
   saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void>;
 }

@@ -16,7 +16,7 @@ import { useSettings } from '@/src/settings/settings-context';
 type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income' | 'transfer'>;
 
 export default function NewTransactionScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { copyId, id } = useLocalSearchParams<{ copyId?: string; id?: string }>();
   const db = useSQLiteContext();
   const repository = useMemo(() => new SQLiteLedgerRepository(db), [db]);
   const router = useRouter();
@@ -49,7 +49,7 @@ export default function NewTransactionScreen() {
       if (!household) throw new Error('Household missing');
       const [member, allAccounts, allCategories, details] = await Promise.all([
         repository.getActiveMember(household.id), repository.listAccounts(household.id), repository.listCategories(household.id),
-        id ? repository.getTransaction(id) : Promise.resolve(null),
+        id || copyId ? repository.getTransaction(id ?? copyId!) : Promise.resolve(null),
       ]);
       if (!member) throw new Error('Member missing');
       const activeAccounts = allAccounts.filter((account) => !account.isArchived);
@@ -60,17 +60,17 @@ export default function NewTransactionScreen() {
       setCategories(allCategories.filter((category) => !category.isArchived));
       setAccountId((current) => activeAccounts.some((account) => account.id === current) ? current : activeAccounts[0]?.id ?? '');
       setTransactionCurrency((current) => current ?? activeAccounts[0]?.openingBalances[0]?.currency ?? null);
-      if (id && !details) throw new Error('Transaction missing');
+      if ((id || copyId) && !details) throw new Error('Transaction missing');
       if (details) {
         if (details.transaction.transactionType === 'transfer') throw new Error('Transfer editing is not supported here');
         const transaction = details.transaction;
         const absoluteAmount = transaction.originalAmount.amountMinor < 0n ? -transaction.originalAmount.amountMinor : transaction.originalAmount.amountMinor;
-        setExisting(details);
+        if (id) setExisting(details);
         setType(transaction.transactionType as EntryType);
         setAccountId(transaction.accountId);
         setTransactionCurrency(transaction.originalAmount.currency);
         setAmount(toMajorAmountInput(money(absoluteAmount, transaction.originalAmount.currency)));
-        setDate(transaction.transactionDate);
+        setDate(copyId ? todayLocal() : transaction.transactionDate);
         setDescription(transaction.description ?? '');
         setCategoryId(transaction.categoryId ?? '');
         if (details.splits.length > 0) {
@@ -88,7 +88,7 @@ export default function NewTransactionScreen() {
     }
   }
 
-  useEffect(() => { void load(); }, [id, repository]);
+  useEffect(() => { void load(); }, [copyId, id, repository]);
   const applicableCategories = categories.filter((category) => category.applicability === type || category.applicability === 'both');
   const sourceAccount = accounts.find((account) => account.id === accountId);
   const destinationAccounts = accounts.filter((account) => account.id !== accountId && account.openingBalances.some((balance) => balance.currency === transactionCurrency));
@@ -229,7 +229,7 @@ export default function NewTransactionScreen() {
         <MaterialCommunityIcons color={theme.primary} name="arrow-left" size={24} />
         <Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text>
       </Pressable>
-      <ScreenHeader title={existing ? t('editTransaction') : t('addTransaction')} />
+      <ScreenHeader title={existing ? t('editTransaction') : copyId ? t('copyTransaction') : t('addTransaction')} />
       <ChoiceGroup label={t('transactionType')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('transfer'), value: 'transfer' }]} selected={type} onSelect={(value) => changeType(value as EntryType)} />
       {accounts.length === 0 ? <ErrorState message={t('noActiveAccountsForTransaction')} /> : <>
         <AppTextField error={validationError ?? undefined} keyboardType="decimal-pad" label={t('amount')} onChangeText={setAmount} placeholder="0.00" value={amount} />

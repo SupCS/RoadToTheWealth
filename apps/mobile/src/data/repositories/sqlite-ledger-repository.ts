@@ -453,6 +453,30 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     });
   }
 
+  async restoreTransaction(transactionId: string, updatedAt: string, updatedByMemberId: string): Promise<void> {
+    const linkedIdsSql = `SELECT debit_transaction_id FROM transfer_links WHERE debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?
+      UNION SELECT credit_transaction_id FROM transfer_links WHERE debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?
+      UNION SELECT fee_transaction_id FROM transfer_links WHERE fee_transaction_id IS NOT NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)`;
+    const ids = [transactionId, transactionId, transactionId, transactionId, transactionId, transactionId, transactionId, transactionId, transactionId];
+    await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
+      await transactionDb.runAsync(
+        `UPDATE transactions SET deleted_at = NULL, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE deleted_at IS NOT NULL AND (id = ? OR id IN (${linkedIdsSql}))`,
+        updatedAt, updatedByMemberId, transactionId, ...ids,
+      );
+      await transactionDb.runAsync(
+        `UPDATE transaction_splits SET deleted_at = NULL, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE deleted_at IS NOT NULL AND (transaction_id = ? OR transaction_id IN (${linkedIdsSql}))`,
+        updatedAt, updatedByMemberId, transactionId, ...ids,
+      );
+      await transactionDb.runAsync(
+        `UPDATE transfer_links SET deleted_at = NULL, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE deleted_at IS NOT NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)`,
+        updatedAt, updatedByMemberId, transactionId, transactionId, transactionId,
+      );
+    });
+  }
+
   async saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void> {
     assertTransferMatchesLegs(debit, credit, link, fee);
     await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
