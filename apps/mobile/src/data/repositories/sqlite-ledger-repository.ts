@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { MoneyCurrencyCode } from '../../domain/money/currencies';
-import { money } from '../../domain/money/money';
+import { money, type Money } from '../../domain/money/money';
 
 import type {
   Account,
@@ -48,7 +48,7 @@ type HouseholdRow = {
   deleted_at: string | null;
 };
 
-type AccountSummaryRow = AccountRow & { current_balance_minor: string };
+type AccountBalanceRow = { account_id: string; amount_minor: string; currency_code: MoneyCurrencyCode };
 
 type MemberRow = {
   id: string; household_id: string; user_id: string | null; display_name: string;
@@ -157,7 +157,10 @@ export class SQLiteLedgerRepository implements LedgerRepository {
   }
 
   async saveAccount(value: Account): Promise<void> {
-    await this.db.runAsync(
+    assertOpeningBalances(value.openingBalances);
+    await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
+      const legacyBalance = value.openingBalances[0]!;
+      await transactionDb.runAsync(
       `INSERT INTO accounts (
         id, household_id, ownership_scope, owner_member_id, name, account_type,
         currency_code, opening_balance_minor, is_archived, created_at, updated_at,
@@ -177,10 +180,24 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         deleted_at = excluded.deleted_at
       WHERE excluded.revision > accounts.revision`,
       value.id, value.householdId, value.ownershipScope, value.ownerMemberId, value.name,
-      value.accountType, value.openingBalance.currency, value.openingBalance.amountMinor.toString(),
+      value.accountType, legacyBalance.currency, legacyBalance.amountMinor.toString(),
       value.isArchived ? 1 : 0, value.createdAt, value.updatedAt, value.createdByMemberId,
       value.updatedByMemberId, value.revision, value.deletedAt,
-    );
+      );
+      for (const balance of value.openingBalances) {
+        await transactionDb.runAsync(
+          `INSERT INTO account_currency_balances (
+            account_id, currency_code, opening_balance_minor, created_at, updated_at, revision
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(account_id, currency_code) DO UPDATE SET
+            opening_balance_minor = excluded.opening_balance_minor,
+            updated_at = excluded.updated_at,
+            revision = excluded.revision
+          WHERE excluded.revision > account_currency_balances.revision`,
+          value.id, balance.currency, balance.amountMinor.toString(), value.createdAt, value.updatedAt, value.revision,
+        );
+      }
+    });
   }
 
   async getAccount(accountId: string): Promise<Account | null> {
@@ -192,7 +209,8 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       FROM accounts WHERE id = ? AND deleted_at IS NULL`,
       accountId,
     );
-    return row ? mapAccount(row) : null;
+    if (!row) return null;
+    return mapAccount(row, await this.getOpeningBalances(row.id));
   }
 
   async setAccountArchived(accountId: string, archived: boolean, updatedAt: string, updatedByMemberId: string): Promise<void> {
@@ -216,28 +234,24 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       householdId,
     );
 
-    return rows.map(mapAccount);
+    return Promise.all(rows.map(async (row) => mapAccount(row, await this.getOpeningBalances(row.id))));
   }
 
   async listAccountSummaries(householdId: string): Promise<AccountSummary[]> {
-    const rows = await this.db.getAllAsync<AccountSummaryRow>(
-      `SELECT a.id, a.household_id, a.ownership_scope, a.owner_member_id, a.name, a.account_type,
-        CAST(a.opening_balance_minor AS TEXT) AS opening_balance_minor, a.currency_code,
-        a.is_archived, a.created_at, a.updated_at, a.created_by_member_id,
-        a.updated_by_member_id, a.revision, a.deleted_at,
-        CAST(a.opening_balance_minor + COALESCE(SUM(
-          CASE WHEN t.status = 'confirmed' AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
-        ), 0) AS TEXT) AS current_balance_minor
-      FROM accounts a
-      LEFT JOIN transactions t ON t.account_id = a.id
-      WHERE a.household_id = ? AND a.deleted_at IS NULL
-      GROUP BY a.id
-      ORDER BY a.is_archived, a.name COLLATE NOCASE`,
-      householdId,
-    );
-    return rows.map((row) => ({
-      account: mapAccount(row),
-      currentBalance: money(BigInt(row.current_balance_minor), row.currency_code),
+    const accounts = await this.listAccounts(householdId);
+    return Promise.all(accounts.map(async (account) => {
+      const rows = await this.db.getAllAsync<AccountBalanceRow>(
+        `SELECT ? AS account_id, b.currency_code,
+          CAST(b.opening_balance_minor + COALESCE(SUM(
+            CASE WHEN t.status = 'confirmed' AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
+          ), 0) AS TEXT) AS amount_minor
+        FROM account_currency_balances b
+        LEFT JOIN transactions t ON t.account_id = b.account_id AND t.currency_code = b.currency_code
+        WHERE b.account_id = ?
+        GROUP BY b.currency_code
+        ORDER BY b.currency_code`, account.id, account.id,
+      );
+      return { account, currentBalances: rows.map(mapBalance) };
     }));
   }
 
@@ -249,21 +263,17 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       ? [scope.householdId, scope.memberId]
       : [scope.householdId];
     const rows = await this.db.getAllAsync<BalanceRow>(
-      `SELECT CAST(SUM(account_balance_minor) AS TEXT) AS amount_minor, currency_code
-      FROM (
-        SELECT a.id, a.currency_code,
-          a.opening_balance_minor + COALESCE(SUM(
-            CASE WHEN t.status = 'confirmed' AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
-          ), 0) AS account_balance_minor
-        FROM accounts a
-        LEFT JOIN transactions t ON t.account_id = a.id
-        WHERE a.household_id = ? AND a.deleted_at IS NULL AND a.is_archived = 0
-          ${personalClause}
-        GROUP BY a.id
-      ) balances
-      GROUP BY currency_code
-      ORDER BY currency_code`,
-      parameters,
+      `SELECT CAST(SUM(amount_minor) AS TEXT) AS amount_minor, currency_code FROM (
+        SELECT b.opening_balance_minor AS amount_minor, b.currency_code
+        FROM account_currency_balances b JOIN accounts a ON a.id = b.account_id
+        WHERE a.household_id = ? AND a.deleted_at IS NULL AND a.is_archived = 0 ${personalClause}
+        UNION ALL
+        SELECT t.amount_minor AS amount_minor, t.currency_code
+        FROM transactions t JOIN accounts a ON a.id = t.account_id
+        WHERE a.household_id = ? AND a.deleted_at IS NULL AND a.is_archived = 0 ${personalClause}
+          AND t.status = 'confirmed' AND t.deleted_at IS NULL
+      ) balances GROUP BY currency_code ORDER BY currency_code`,
+      [...parameters, ...parameters],
     );
 
     return rows.map((row) => money(BigInt(row.amount_minor), row.currency_code));
@@ -295,6 +305,14 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       value.isArchived ? 1 : 0, value.createdAt, value.updatedAt, value.createdByMemberId,
       value.updatedByMemberId, value.revision, value.deletedAt,
     );
+  }
+
+  private async getOpeningBalances(accountId: string): Promise<Money[]> {
+    const rows = await this.db.getAllAsync<AccountBalanceRow>(
+      `SELECT account_id, CAST(opening_balance_minor AS TEXT) AS amount_minor, currency_code
+      FROM account_currency_balances WHERE account_id = ? ORDER BY currency_code`, accountId,
+    );
+    return rows.map(mapBalance);
   }
 
   async listCategories(householdId: string): Promise<Category[]> {
@@ -396,7 +414,7 @@ function assertTransferMatchesLegs(debit: Transaction, credit: Transaction, link
   if (debit.transactionDate !== credit.transactionDate) throw new Error('Transfer legs must use the same date');
 }
 
-function mapAccount(row: AccountRow): Account {
+function mapAccount(row: AccountRow, openingBalances: Money[]): Account {
   return {
     id: row.id,
     householdId: row.household_id,
@@ -404,7 +422,7 @@ function mapAccount(row: AccountRow): Account {
     ownerMemberId: row.owner_member_id,
     name: row.name,
     accountType: row.account_type,
-    openingBalance: money(BigInt(row.opening_balance_minor), row.currency_code),
+    openingBalances,
     isArchived: row.is_archived === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -413,6 +431,17 @@ function mapAccount(row: AccountRow): Account {
     revision: row.revision,
     deletedAt: row.deleted_at,
   };
+}
+
+function mapBalance(row: Pick<AccountBalanceRow, 'amount_minor' | 'currency_code'>): Money {
+  return money(BigInt(row.amount_minor), row.currency_code);
+}
+
+function assertOpeningBalances(balances: Money[]): void {
+  if (balances.length === 0) throw new Error('An account must have at least one currency balance');
+  if (new Set(balances.map((balance) => balance.currency)).size !== balances.length) {
+    throw new Error('Account currency balances must be unique');
+  }
 }
 
 function mapCategory(row: CategoryRow): Category {

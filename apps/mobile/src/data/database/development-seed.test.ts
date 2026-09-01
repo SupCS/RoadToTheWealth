@@ -30,6 +30,6 @@ describe('seedDevelopmentData', () => {
     const db = createDatabase(0);
     expect(await seedDevelopmentData(db as never, { explicitlyEnabled: true })).toBe('created');
     expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
-    expect(db.transaction.runAsync).toHaveBeenCalledTimes(3);
+    expect(db.transaction.runAsync).toHaveBeenCalledTimes(4);
   });
 });

@@ -50,6 +50,12 @@ export async function seedDevelopmentData(
       '20000000-0000-4000-8000-000000000002',
       '20000000-0000-4000-8000-000000000002',
     );
+    await transaction.runAsync(
+      `INSERT INTO account_currency_balances (
+        account_id, currency_code, opening_balance_minor, created_at, updated_at, revision
+      ) VALUES (?, 'USD', 0, ?, ?, 1)`,
+      '20000000-0000-4000-8000-000000000003', timestamp, timestamp,
+    );
   });
   return 'created';
 }

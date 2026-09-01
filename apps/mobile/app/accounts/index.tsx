@@ -57,7 +57,7 @@ export default function AccountsScreen() {
           title={t('noAccounts')}
         />
       ) : null}
-      {state.status === 'ready' ? state.accounts.map(({ account, currentBalance }) => (
+      {state.status === 'ready' ? state.accounts.map(({ account, currentBalances }) => (
         <Pressable
           accessibilityRole="button"
           key={account.id}
@@ -78,7 +78,7 @@ export default function AccountsScreen() {
                   </Text>
                 </View>
               </View>
-              <MoneyText locale={locale} value={currentBalance} variant="metric" />
+              <View style={styles.balances}>{currentBalances.map((balance) => <MoneyText key={balance.currency} locale={locale} value={balance} variant="metric" />)}</View>
             </View>
             {account.isArchived ? <Text style={[styles.archived, { color: theme.muted }]}>{t('archived')}</Text> : null}
           </Card>
@@ -105,4 +105,5 @@ const styles = StyleSheet.create({
   accountMeta: { fontSize: fontSizes.caption, marginTop: spacing.xs },
   icon: { alignItems: 'center', borderRadius: radii.lg, height: 44, justifyContent: 'center', width: 44 },
   archived: { fontSize: fontSizes.caption, marginTop: spacing.md },
+  balances: { alignItems: 'flex-end', gap: spacing.xs },
 });

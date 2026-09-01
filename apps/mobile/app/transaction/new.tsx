@@ -10,6 +10,7 @@ import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-re
 import { AppTextField, ErrorState, LoadingState, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import { money, parseMajorAmount } from '@/src/domain/money/money';
+import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
 import { useSettings } from '@/src/settings/settings-context';
 
 type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income' | 'transfer'>;
@@ -26,6 +27,7 @@ export default function NewTransactionScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [type, setType] = useState<EntryType>('expense');
   const [accountId, setAccountId] = useState('');
+  const [transactionCurrency, setTransactionCurrency] = useState<MoneyCurrencyCode | null>(null);
   const [destinationAccountId, setDestinationAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
@@ -50,6 +52,7 @@ export default function NewTransactionScreen() {
       setAccounts(activeAccounts);
       setCategories(allCategories.filter((category) => !category.isArchived));
       setAccountId((current) => activeAccounts.some((account) => account.id === current) ? current : activeAccounts[0]?.id ?? '');
+      setTransactionCurrency((current) => current ?? activeAccounts[0]?.openingBalances[0]?.currency ?? null);
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -59,7 +62,7 @@ export default function NewTransactionScreen() {
   useEffect(() => { void load(); }, [repository]);
   const applicableCategories = categories.filter((category) => category.applicability === type || category.applicability === 'both');
   const sourceAccount = accounts.find((account) => account.id === accountId);
-  const destinationAccounts = accounts.filter((account) => account.id !== accountId && account.openingBalance.currency === sourceAccount?.openingBalance.currency);
+  const destinationAccounts = accounts.filter((account) => account.id !== accountId && account.openingBalances.some((balance) => balance.currency === transactionCurrency));
 
   function changeType(nextType: EntryType) {
     setType(nextType);
@@ -76,7 +79,8 @@ export default function NewTransactionScreen() {
     }
     let enteredAmount;
     try {
-      enteredAmount = parseMajorAmount(amount, account.openingBalance.currency);
+      if (!transactionCurrency || !account.openingBalances.some((balance) => balance.currency === transactionCurrency)) throw new Error('Currency missing');
+      enteredAmount = parseMajorAmount(amount, transactionCurrency);
       if (enteredAmount.amountMinor <= 0n) throw new Error('Amount must be positive');
     } catch {
       setValidationError(t('positiveAmountRequired'));
@@ -146,10 +150,16 @@ export default function NewTransactionScreen() {
       <ChoiceGroup label={t('transactionType')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('transfer'), value: 'transfer' }]} selected={type} onSelect={(value) => changeType(value as EntryType)} />
       {accounts.length === 0 ? <ErrorState message={t('noActiveAccountsForTransaction')} /> : <>
         <AppTextField error={validationError ?? undefined} keyboardType="decimal-pad" label={t('amount')} onChangeText={setAmount} placeholder="0.00" value={amount} />
-        <ChoiceGroup label={t('account')} options={accounts.map((account) => ({ label: `${account.name} · ${account.openingBalance.currency}`, value: account.id }))} selected={accountId} onSelect={setAccountId} />
+        <ChoiceGroup label={t('account')} options={accounts.map((account) => ({ label: account.name, value: account.id }))} selected={accountId} onSelect={(value) => {
+          setAccountId(value);
+          const nextAccount = accounts.find((account) => account.id === value);
+          if (!nextAccount?.openingBalances.some((balance) => balance.currency === transactionCurrency)) setTransactionCurrency(nextAccount?.openingBalances[0]?.currency ?? null);
+          setDestinationAccountId('');
+        }} />
+        {sourceAccount ? <ChoiceGroup label={t('currency')} options={sourceAccount.openingBalances.map((balance) => ({ label: balance.currency, value: balance.currency }))} selected={transactionCurrency ?? ''} onSelect={(value) => { setTransactionCurrency(value as MoneyCurrencyCode); setDestinationAccountId(''); }} /> : null}
         {type === 'transfer' ? (
           destinationAccounts.length > 0
-            ? <ChoiceGroup label={t('destinationAccount')} options={destinationAccounts.map((account) => ({ label: `${account.name} · ${account.openingBalance.currency}`, value: account.id }))} selected={destinationAccountId} onSelect={setDestinationAccountId} />
+            ? <ChoiceGroup label={t('destinationAccount')} options={destinationAccounts.map((account) => ({ label: account.name, value: account.id }))} selected={destinationAccountId} onSelect={setDestinationAccountId} />
             : <ErrorState message={t('noCompatibleDestinationAccount')} />
         ) : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: category.names[locale], value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
         <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />

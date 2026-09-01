@@ -30,7 +30,7 @@ export type Account = AuditFields & Readonly<{
   ownerMemberId: string | null;
   name: string;
   accountType: 'cash' | 'debit_card' | 'credit_card' | 'current' | 'savings' | 'deposit' | 'investment' | 'debt' | 'e_wallet' | 'custom';
-  openingBalance: Money;
+  openingBalances: Money[];
   isArchived: boolean;
 }>;
 
@@ -40,7 +40,7 @@ export type BalanceScope =
 
 export type AccountSummary = Readonly<{
   account: Account;
-  currentBalance: Money;
+  currentBalances: Money[];
 }>;
 
 export type Category = AuditFields & Readonly<{

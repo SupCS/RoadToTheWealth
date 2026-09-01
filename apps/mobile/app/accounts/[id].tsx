@@ -29,6 +29,7 @@ export default function AccountEditorScreen() {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('0');
   const [currency, setCurrency] = useState<MoneyCurrencyCode>(baseCurrency);
+  const [balanceInputs, setBalanceInputs] = useState<Partial<Record<MoneyCurrencyCode, string>>>({ [baseCurrency]: '0' });
   const [ownershipScope, setOwnershipScope] = useState<Account['ownershipScope']>('personal');
   const [accountType, setAccountType] = useState<AccountType>('current');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -49,8 +50,11 @@ export default function AccountEditorScreen() {
         if (existing) {
           setAccount(existing);
           setName(existing.name);
-          setAmount(toMajorAmountInput(existing.openingBalance));
-          setCurrency(existing.openingBalance.currency);
+          const inputs = Object.fromEntries(existing.openingBalances.map((balance) => [balance.currency, toMajorAmountInput(balance)]));
+          const first = existing.openingBalances[0]!;
+          setBalanceInputs(inputs);
+          setAmount(toMajorAmountInput(first));
+          setCurrency(first.currency);
           setOwnershipScope(existing.ownershipScope);
           setAccountType(existing.accountType);
         }
@@ -68,9 +72,10 @@ export default function AccountEditorScreen() {
       setValidationError(t('accountNameRequired'));
       return;
     }
-    let openingBalance;
+    let openingBalances;
     try {
-      openingBalance = parseMajorAmount(amount, currency);
+      openingBalances = Object.entries({ ...balanceInputs, [currency]: amount }).map(([code, value]) =>
+        parseMajorAmount(value ?? '0', code as MoneyCurrencyCode));
     } catch {
       setValidationError(t('invalidAmount'));
       return;
@@ -87,7 +92,7 @@ export default function AccountEditorScreen() {
         ownerMemberId: ownershipScope === 'personal' ? memberId : null,
         name: trimmedName,
         accountType,
-        openingBalance,
+        openingBalances,
         isArchived: account?.isArchived ?? false,
         createdAt: account?.createdAt ?? now,
         updatedAt: now,
@@ -129,12 +134,17 @@ export default function AccountEditorScreen() {
       </Pressable>
       <ScreenHeader title={isNew ? t('newAccount') : t('editAccount')} />
       <AppTextField label={t('accountName')} onChangeText={setName} value={name} />
-      <AppTextField keyboardType="decimal-pad" label={t('openingBalance')} onChangeText={setAmount} value={amount} />
+      <ChoiceGroup label={t('accountCurrencies')} options={currencyCatalog.map((value) => ({ label: `${balanceInputs[value] !== undefined ? '✓ ' : ''}${value}`, value }))} selected={currency} onSelect={(value) => {
+        const next = value as MoneyCurrencyCode;
+        setBalanceInputs((current) => ({ ...current, [currency]: amount, [next]: current[next] ?? '0' }));
+        setCurrency(next);
+        setAmount(balanceInputs[next] ?? '0');
+      }} />
+      <AppTextField keyboardType="decimal-pad" label={`${t('openingBalance')} · ${currency}`} onChangeText={setAmount} value={amount} />
       <ChoiceGroup label={t('ownership')} options={[
         { label: t('personalAccount'), value: 'personal' }, { label: t('sharedAccount'), value: 'shared' },
       ]} selected={ownershipScope} onSelect={(value) => setOwnershipScope(value as Account['ownershipScope'])} />
       <ChoiceGroup label={t('accountType')} options={accountTypes.map((value) => ({ label: t(accountTypeKey[value]), value }))} selected={accountType} onSelect={(value) => setAccountType(value as AccountType)} />
-      <ChoiceGroup label={t('currency')} options={currencyCatalog.map((value) => ({ label: value, value }))} selected={currency} onSelect={(value) => setCurrency(value as MoneyCurrencyCode)} />
       {validationError ? <Text accessibilityLiveRegion="polite" style={[styles.error, { color: theme.danger }]}>{validationError}</Text> : null}
       <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />
       {!isNew && !account?.isArchived ? (

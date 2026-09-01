@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 4;
+export const DATABASE_VERSION = 5;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -222,6 +222,29 @@ const migrations = [
       );
 
       CREATE INDEX transfer_links_household_idx ON transfer_links(household_id, deleted_at);
+    `,
+  },
+  {
+    version: 5,
+    sql: `
+      CREATE TABLE account_currency_balances (
+        account_id TEXT NOT NULL REFERENCES accounts(id),
+        currency_code TEXT NOT NULL CHECK (length(currency_code) = 3),
+        opening_balance_minor INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        PRIMARY KEY (account_id, currency_code)
+      );
+
+      INSERT INTO account_currency_balances (
+        account_id, currency_code, opening_balance_minor, created_at, updated_at, revision
+      )
+      SELECT id, currency_code, opening_balance_minor, created_at, updated_at, revision
+      FROM accounts;
+
+      CREATE INDEX account_currency_balances_currency_idx
+        ON account_currency_balances(currency_code, account_id);
     `,
   },
 ] as const;
