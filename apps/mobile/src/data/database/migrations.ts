@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 3;
+export const DATABASE_VERSION = 4;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -196,6 +196,32 @@ const migrations = [
         ('10000000-0000-4000-8000-000000000010', NULL, NULL, 'income', 'other_income',
           'Other income', 'Інший дохід', 'Другой доход', 'add-circle', NULL, 0,
           '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', NULL, NULL, 1, NULL);
+    `,
+  },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE transfer_links (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES households(id),
+        debit_transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id),
+        credit_transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id),
+        sent_amount_minor INTEGER NOT NULL CHECK (sent_amount_minor > 0),
+        sent_currency_code TEXT NOT NULL CHECK (length(sent_currency_code) = 3),
+        received_amount_minor INTEGER NOT NULL CHECK (received_amount_minor > 0),
+        received_currency_code TEXT NOT NULL CHECK (length(received_currency_code) = 3),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        created_by_member_id TEXT REFERENCES household_members(id),
+        updated_by_member_id TEXT REFERENCES household_members(id),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        deleted_at TEXT,
+        CHECK (debit_transaction_id <> credit_transaction_id),
+        CHECK (sent_currency_code = received_currency_code),
+        CHECK (sent_amount_minor = received_amount_minor)
+      );
+
+      CREATE INDEX transfer_links_household_idx ON transfer_links(household_id, deleted_at);
     `,
   },
 ] as const;

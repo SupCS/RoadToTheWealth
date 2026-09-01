@@ -40,11 +40,11 @@ Required transaction data:
 - base-currency amount calculated from the immutable FX snapshot;
 - sync, review, and deletion states.
 
-Transfers link two legs and do not affect income/expense reports. Cross-currency transfers preserve sent amount, received amount, bank rate, reference rate, and fees.
+Transfers link two legs and do not affect income/expense reports. They preserve one amount and currency across both legs. Currency exchange inside an account is a separate operation that preserves both exchanged amounts, the applied rate snapshot, and fees.
 
 ## 5. Multi-currency behavior
 
-- Every account has a native currency; transactions retain their original currency.
+- An account may hold balances in multiple enabled currencies; transactions retain their original currency and affect the matching currency balance inside the account.
 - A household has a base reporting currency, switchable without rewriting history.
 - Users may temporarily display reports in any enabled currency.
 - Historical rate is selected by transaction/posting date. On a non-publishing day, use the latest available rate on or before that date.

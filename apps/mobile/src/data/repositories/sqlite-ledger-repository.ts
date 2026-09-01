@@ -13,6 +13,7 @@ import type {
   LedgerRepository,
   Transaction,
   TransactionSplit,
+  TransferLink,
 } from './ledger-repository';
 
 type AccountRow = {
@@ -314,23 +315,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     assertSplitsMatchTransaction(value, splits);
 
     await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
-      await transactionDb.runAsync(
-        `INSERT INTO transactions (
-          id, household_id, account_id, member_id, category_id, transaction_type,
-          transaction_date, posting_date, source, status, amount_minor, currency_code,
-          reporting_amount_minor, reporting_currency_code, fx_rate_decimal, fx_provider,
-          fx_requested_date, fx_effective_date, description, notes, created_at, updated_at,
-          created_by_member_id, updated_by_member_id, revision, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        value.id, value.householdId, value.accountId, value.memberId, value.categoryId,
-        value.transactionType, value.transactionDate, value.postingDate, value.source, value.status,
-        value.originalAmount.amountMinor.toString(), value.originalAmount.currency,
-        value.reportingAmount?.amountMinor.toString() ?? null, value.reportingAmount?.currency ?? null,
-        value.fxSnapshot?.rateDecimal ?? null, value.fxSnapshot?.provider ?? null,
-        value.fxSnapshot?.requestedDate ?? null, value.fxSnapshot?.effectiveDate ?? null,
-        value.description, value.notes, value.createdAt, value.updatedAt, value.createdByMemberId,
-        value.updatedByMemberId, value.revision, value.deletedAt,
-      );
+      await insertTransaction(transactionDb, value);
 
       for (const split of splits) {
         await transactionDb.runAsync(
@@ -345,6 +330,48 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       }
     });
   }
+
+  async saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink): Promise<void> {
+    assertTransferMatchesLegs(debit, credit, link);
+    await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
+      await insertTransaction(transactionDb, debit);
+      await insertTransaction(transactionDb, credit);
+      await transactionDb.runAsync(
+        `INSERT INTO transfer_links (
+          id, household_id, debit_transaction_id, credit_transaction_id,
+          sent_amount_minor, sent_currency_code, received_amount_minor, received_currency_code,
+          created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        link.id, link.householdId, link.debitTransactionId, link.creditTransactionId,
+        link.sentAmount.amountMinor.toString(), link.sentAmount.currency,
+        link.receivedAmount.amountMinor.toString(), link.receivedAmount.currency,
+        link.createdAt, link.updatedAt, link.createdByMemberId, link.updatedByMemberId,
+        link.revision, link.deletedAt,
+      );
+    });
+  }
+}
+
+type TransactionWriter = Pick<SQLiteDatabase, 'runAsync'>;
+
+async function insertTransaction(db: TransactionWriter, value: Transaction): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO transactions (
+      id, household_id, account_id, member_id, category_id, transaction_type,
+      transaction_date, posting_date, source, status, amount_minor, currency_code,
+      reporting_amount_minor, reporting_currency_code, fx_rate_decimal, fx_provider,
+      fx_requested_date, fx_effective_date, description, notes, created_at, updated_at,
+      created_by_member_id, updated_by_member_id, revision, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    value.id, value.householdId, value.accountId, value.memberId, value.categoryId,
+    value.transactionType, value.transactionDate, value.postingDate, value.source, value.status,
+    value.originalAmount.amountMinor.toString(), value.originalAmount.currency,
+    value.reportingAmount?.amountMinor.toString() ?? null, value.reportingAmount?.currency ?? null,
+    value.fxSnapshot?.rateDecimal ?? null, value.fxSnapshot?.provider ?? null,
+    value.fxSnapshot?.requestedDate ?? null, value.fxSnapshot?.effectiveDate ?? null,
+    value.description, value.notes, value.createdAt, value.updatedAt, value.createdByMemberId,
+    value.updatedByMemberId, value.revision, value.deletedAt,
+  );
 }
 
 function assertManualTransactionAmount(value: Transaction): void {
@@ -354,6 +381,19 @@ function assertManualTransactionAmount(value: Transaction): void {
   if (value.transactionType === 'income' && value.originalAmount.amountMinor <= 0n) {
     throw new Error('Income amount must be positive');
   }
+}
+
+function assertTransferMatchesLegs(debit: Transaction, credit: Transaction, link: TransferLink): void {
+  if (debit.transactionType !== 'transfer' || credit.transactionType !== 'transfer') throw new Error('Both transfer legs must have transfer type');
+  if (debit.householdId !== credit.householdId || link.householdId !== debit.householdId) throw new Error('Transfer legs must belong to one household');
+  if (debit.accountId === credit.accountId) throw new Error('Transfer accounts must be different');
+  if (debit.id !== link.debitTransactionId || credit.id !== link.creditTransactionId) throw new Error('Transfer link must reference both legs');
+  if (debit.originalAmount.amountMinor >= 0n || credit.originalAmount.amountMinor <= 0n) throw new Error('Transfer leg directions are invalid');
+  if (link.sentAmount.amountMinor <= 0n || link.receivedAmount.amountMinor <= 0n) throw new Error('Transfer amounts must be positive');
+  if (link.sentAmount.currency !== link.receivedAmount.currency || link.sentAmount.amountMinor !== link.receivedAmount.amountMinor) throw new Error('Transfer must preserve amount and currency');
+  if (debit.originalAmount.currency !== link.sentAmount.currency || -debit.originalAmount.amountMinor !== link.sentAmount.amountMinor) throw new Error('Debit leg must match sent amount');
+  if (credit.originalAmount.currency !== link.receivedAmount.currency || credit.originalAmount.amountMinor !== link.receivedAmount.amountMinor) throw new Error('Credit leg must match received amount');
+  if (debit.transactionDate !== credit.transactionDate) throw new Error('Transfer legs must use the same date');
 }
 
 function mapAccount(row: AccountRow): Account {

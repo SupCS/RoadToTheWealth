@@ -118,4 +118,42 @@ describe('SQLiteLedgerRepository', () => {
     }, [])).rejects.toThrow(transactionType === 'expense' ? 'negative' : 'positive');
     expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();
   });
+
+  it('writes two matching transfer legs and their link atomically', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+    const debit = {
+      id: 'debit-1', householdId: 'household-1', accountId: 'account-1', memberId: 'member-1',
+      categoryId: null, transactionType: 'transfer', transactionDate: '2026-09-01', postingDate: null,
+      source: 'manual', status: 'confirmed', originalAmount: money(-2500n, 'USD'), reportingAmount: null,
+      fxSnapshot: null, description: null, notes: null, ...audit,
+    } as const;
+    const credit = { ...debit, id: 'credit-1', accountId: 'account-2', originalAmount: money(2500n, 'USD') } as const;
+
+    await repository.saveTransfer(debit, credit, {
+      id: 'transfer-1', householdId: 'household-1', debitTransactionId: debit.id,
+      creditTransactionId: credit.id, sentAmount: money(2500n, 'USD'), receivedAmount: money(2500n, 'USD'), ...audit,
+    });
+
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
+    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects a transfer that changes currency before writing anything', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+    const debit = {
+      id: 'debit-1', householdId: 'household-1', accountId: 'account-1', memberId: 'member-1',
+      categoryId: null, transactionType: 'transfer', transactionDate: '2026-09-01', postingDate: null,
+      source: 'manual', status: 'confirmed', originalAmount: money(-2500n, 'USD'), reportingAmount: null,
+      fxSnapshot: null, description: null, notes: null, ...audit,
+    } as const;
+    const credit = { ...debit, id: 'credit-1', accountId: 'account-2', originalAmount: money(2300n, 'EUR') } as const;
+
+    await expect(repository.saveTransfer(debit, credit, {
+      id: 'transfer-1', householdId: 'household-1', debitTransactionId: debit.id,
+      creditTransactionId: credit.id, sentAmount: money(2500n, 'USD'), receivedAmount: money(2300n, 'EUR'), ...audit,
+    })).rejects.toThrow('preserve amount and currency');
+    expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();
+  });
 });

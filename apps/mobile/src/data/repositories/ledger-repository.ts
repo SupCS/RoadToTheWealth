@@ -83,6 +83,14 @@ export type TransactionSplit = AuditFields & Readonly<{
   amount: Money;
 }>;
 
+export type TransferLink = AuditFields & Readonly<{
+  householdId: string;
+  debitTransactionId: string;
+  creditTransactionId: string;
+  sentAmount: Money;
+  receivedAmount: Money;
+}>;
+
 export interface LedgerRepository {
   saveHousehold(household: Household): Promise<void>;
   getActiveHousehold(): Promise<Household | null>;
@@ -97,4 +105,5 @@ export interface LedgerRepository {
   saveCategory(category: Category): Promise<void>;
   listCategories(householdId: string): Promise<Category[]>;
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
+  saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink): Promise<void>;
 }

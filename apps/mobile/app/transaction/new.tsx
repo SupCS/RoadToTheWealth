@@ -12,7 +12,7 @@ import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import { money, parseMajorAmount } from '@/src/domain/money/money';
 import { useSettings } from '@/src/settings/settings-context';
 
-type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income'>;
+type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income' | 'transfer'>;
 
 export default function NewTransactionScreen() {
   const db = useSQLiteContext();
@@ -26,6 +26,7 @@ export default function NewTransactionScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [type, setType] = useState<EntryType>('expense');
   const [accountId, setAccountId] = useState('');
+  const [destinationAccountId, setDestinationAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayLocal());
@@ -57,11 +58,14 @@ export default function NewTransactionScreen() {
 
   useEffect(() => { void load(); }, [repository]);
   const applicableCategories = categories.filter((category) => category.applicability === type || category.applicability === 'both');
+  const sourceAccount = accounts.find((account) => account.id === accountId);
+  const destinationAccounts = accounts.filter((account) => account.id !== accountId && account.openingBalance.currency === sourceAccount?.openingBalance.currency);
 
   function changeType(nextType: EntryType) {
     setType(nextType);
     const selected = categories.find((category) => category.id === categoryId);
     if (selected && selected.applicability !== nextType && selected.applicability !== 'both') setCategoryId('');
+    if (nextType !== 'transfer') setDestinationAccountId('');
   }
 
   async function save() {
@@ -88,6 +92,32 @@ export default function NewTransactionScreen() {
     const signedAmount = money(type === 'expense' ? -enteredAmount.amountMinor : enteredAmount.amountMinor, enteredAmount.currency);
     const isBaseCurrency = signedAmount.currency === baseCurrency;
     try {
+      if (type === 'transfer') {
+        const destination = destinationAccounts.find((candidate) => candidate.id === destinationAccountId);
+        if (!destination) {
+          setStatus('ready');
+          setValidationError(t('destinationAccountRequired'));
+          return;
+        }
+        const debitId = Crypto.randomUUID();
+        const creditId = Crypto.randomUUID();
+        const common = {
+          householdId, memberId, categoryId: null, transactionType: 'transfer' as const,
+          transactionDate: date, postingDate: null, source: 'manual' as const, status: 'confirmed' as const,
+          reportingAmount: null, fxSnapshot: null, description: description.trim() || null, notes: null,
+          createdAt: now, updatedAt: now, createdByMemberId: memberId, updatedByMemberId: memberId,
+          revision: 1, deletedAt: null,
+        };
+        await repository.saveTransfer(
+          { ...common, id: debitId, accountId: account.id, originalAmount: money(-enteredAmount.amountMinor, enteredAmount.currency) },
+          { ...common, id: creditId, accountId: destination.id, originalAmount: enteredAmount },
+          { id: Crypto.randomUUID(), householdId, debitTransactionId: debitId, creditTransactionId: creditId,
+            sentAmount: enteredAmount, receivedAmount: enteredAmount, createdAt: now, updatedAt: now,
+            createdByMemberId: memberId, updatedByMemberId: memberId, revision: 1, deletedAt: null },
+        );
+        router.replace('/transactions' as Href);
+        return;
+      }
       await repository.saveTransaction({
         id: Crypto.randomUUID(), householdId, accountId: account.id, memberId, categoryId: categoryId || null,
         transactionType: type, transactionDate: date, postingDate: null, source: 'manual',
@@ -113,11 +143,15 @@ export default function NewTransactionScreen() {
         <Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text>
       </Pressable>
       <ScreenHeader title={t('addTransaction')} />
-      <ChoiceGroup label={t('transactionType')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }]} selected={type} onSelect={(value) => changeType(value as EntryType)} />
+      <ChoiceGroup label={t('transactionType')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('transfer'), value: 'transfer' }]} selected={type} onSelect={(value) => changeType(value as EntryType)} />
       {accounts.length === 0 ? <ErrorState message={t('noActiveAccountsForTransaction')} /> : <>
         <AppTextField error={validationError ?? undefined} keyboardType="decimal-pad" label={t('amount')} onChangeText={setAmount} placeholder="0.00" value={amount} />
         <ChoiceGroup label={t('account')} options={accounts.map((account) => ({ label: `${account.name} · ${account.openingBalance.currency}`, value: account.id }))} selected={accountId} onSelect={setAccountId} />
-        <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: category.names[locale], value: category.id }))} selected={categoryId} onSelect={setCategoryId} />
+        {type === 'transfer' ? (
+          destinationAccounts.length > 0
+            ? <ChoiceGroup label={t('destinationAccount')} options={destinationAccounts.map((account) => ({ label: `${account.name} · ${account.openingBalance.currency}`, value: account.id }))} selected={destinationAccountId} onSelect={setDestinationAccountId} />
+            : <ErrorState message={t('noCompatibleDestinationAccount')} />
+        ) : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: category.names[locale], value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
         <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
         <AppTextField autoCapitalize="none" label={t('transactionDate')} onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
         <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />

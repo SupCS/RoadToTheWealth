@@ -8,7 +8,7 @@ This is the conceptual schema; database migrations will become authoritative onc
 - `households`: name, base currency, settings.
 - `household_members`: membership and role.
 - `devices`: sync cursor and revoked state.
-- `accounts`: ownership scope (`personal` or `shared`), nullable personal owner, type, native currency, opening balance, archive state.
+- `accounts`: ownership scope (`personal` or `shared`), nullable personal owner, type, archive state, and one or more currency balances. A currency belongs to a balance within an account, not permanently to the account itself.
 - `categories`: localized/custom label metadata, parent, income/expense applicability.
 - `transactions`: type, dates, source, status, original money, reporting snapshot, description.
 - `transaction_splits`: category allocations whose sum equals the transaction amount.
@@ -42,6 +42,7 @@ Synchronized entities generally include UUID, household ID, created/updated time
 ## Key invariants
 
 - Transaction and split currencies/amounts reconcile exactly.
+- A transfer moves an unchanged amount in one currency between two account currency balances. Currency exchange is a separate operation, not a cross-currency transfer.
 - Transfer legs are linked and reports exclude their principal from income/expense.
 - FX snapshots are immutable after confirmation unless an audited user correction occurs.
 - Import fingerprint uniqueness is scoped to account/source, not globally.
