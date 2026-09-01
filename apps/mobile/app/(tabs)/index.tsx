@@ -1,9 +1,9 @@
-import { StyleSheet, Text } from 'react-native';
-import { type Href, useRouter } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
-import { Card, layoutStyles, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
-import { BalanceWidgets } from '@/src/features/dashboard/balance-widgets';
-import { RatesWidget } from '@/src/fx/rates-widget';
+import { Screen, ScreenHeader } from '@/src/design/layout';
+import { DashboardOverview } from '@/src/features/dashboard/dashboard-overview';
 import { useSettings } from '@/src/settings/settings-context';
 
 export default function HomeScreen() {
@@ -11,25 +11,14 @@ export default function HomeScreen() {
   const router = useRouter();
   return (
     <Screen>
-      <ScreenHeader eyebrow="RTTW" title="Road To The Wealth" />
-      <Text style={[styles.subtitle, { color: theme.muted }]}>{t('subtitle')}</Text>
-      <BalanceWidgets />
-      <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('accounts')}</Text>
-      <Card>
-        <Text style={[styles.empty, { color: theme.muted }]}>{t('accountsHint')}</Text>
-        <PrimaryButton label={t('viewAccounts')} onPress={() => router.push('/accounts' as Href)} />
-      </Card>
-      <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('recent')}</Text>
-      <Card>
-        <Text style={[styles.empty, { color: theme.muted }]}>{t('noTransactions')}</Text>
-        <PrimaryButton label={t('addTransaction')} onPress={() => router.push('/transaction/new')} />
-      </Card>
-      <RatesWidget />
+      <ScreenHeader eyebrow="RTTW" title={t('overview')} action={<Pressable accessibilityLabel={t('addTransaction')} accessibilityRole="button" onPress={() => router.push('/transaction/new')} style={({ pressed }) => [styles.addButton, { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 }]}><MaterialCommunityIcons color={theme.onPrimary} name="plus" size={28} /></Pressable>} />
+      <Text style={[styles.subtitle, { color: theme.muted }]}>{t('dashboardSubtitle')}</Text>
+      <DashboardOverview />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  subtitle: { fontSize: 15, lineHeight: 22, marginBottom: 20, marginTop: -14 },
-  empty: { fontSize: 14, textAlign: 'center' },
+  subtitle: { fontSize: 15, lineHeight: 22, marginBottom: 20, marginTop: -18 },
+  addButton: { alignItems: 'center', borderRadius: 24, height: 48, justifyContent: 'center', width: 48 },
 });

@@ -94,9 +94,9 @@ export function MoneyText({
   value: Money;
   variant?: 'body' | 'display' | 'metric';
 }) {
-  const { theme } = useSettings();
+  const { moneyDisplay, theme } = useSettings();
   const color = tone === 'danger' ? theme.danger : tone === 'positive' ? theme.positive : theme.text;
-  const formatted = formatMoney(value, getIntlLocale(locale));
+  const formatted = formatMoney(value, getIntlLocale(locale), moneyDisplay);
   return (
     <Text
       accessibilityLabel={formatted}

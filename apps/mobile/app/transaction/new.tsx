@@ -43,6 +43,7 @@ export default function NewTransactionScreen() {
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(Boolean(id || copyId));
 
   async function load() {
     setStatus('loading');
@@ -284,10 +285,10 @@ export default function NewTransactionScreen() {
             ? <ChoiceGroup label={t('destinationAccount')} options={destinationAccounts.map((account) => ({ label: account.name, value: account.id }))} selected={destinationAccountId} onSelect={setDestinationAccountId} />
             : <ErrorState message={t('noCompatibleDestinationAccount')} />
         ) : <>
-          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: splitEnabled }} onPress={() => { setSplitEnabled((value) => !value); setCategoryId(''); }} style={[styles.splitToggle, { borderColor: splitEnabled ? theme.primary : theme.border, backgroundColor: splitEnabled ? theme.primary : theme.surface }]}>
+          {showDetails ? <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: splitEnabled }} onPress={() => { setSplitEnabled((value) => !value); setCategoryId(''); }} style={[styles.splitToggle, { borderColor: splitEnabled ? theme.primary : theme.border, backgroundColor: splitEnabled ? theme.primary : theme.surface }]}>
             <MaterialCommunityIcons color={splitEnabled ? theme.onPrimary : theme.text} name={splitEnabled ? 'checkbox-marked-outline' : 'checkbox-blank-outline'} size={22} />
             <Text style={[styles.choiceLabel, { color: splitEnabled ? theme.onPrimary : theme.text }]}>{t('splitTransaction')}</Text>
-          </Pressable>
+          </Pressable> : null}
           {splitEnabled ? <>
             <MultiChoiceGroup label={t('splitCategories')} options={applicableCategories.map((category) => ({ label: categoryLabel(category, categories, locale), value: category.id }))} selected={splitCategoryIds} onToggle={(value) => {
               setSplitCategoryIds((current) => current.includes(value) ? current.filter((id) => id !== value) : [...current, value]);
@@ -295,15 +296,21 @@ export default function NewTransactionScreen() {
             }} />
             {splitCategoryIds.map((id) => <AppTextField key={id} keyboardType="decimal-pad" label={`${categoryLabel(categories.find((category) => category.id === id)!, categories, locale)} · ${t('amount')}`} onChangeText={(value) => setSplitAmounts((current) => ({ ...current, [id]: value }))} value={splitAmounts[id] ?? ''} />)}
           </> : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: categoryLabel(category, categories, locale), value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
-          <Pressable accessibilityRole="button" onPress={() => router.push('/categories' as Href)} style={styles.manageCategoriesButton}>
+          {showDetails ? <Pressable accessibilityRole="button" onPress={() => router.push('/categories' as Href)} style={styles.manageCategoriesButton}>
             <MaterialCommunityIcons color={theme.primary} name="shape-plus-outline" size={20} />
             <Text style={[styles.manageCategoriesLabel, { color: theme.primary }]}>{t('manageCategories')}</Text>
-          </Pressable>
+          </Pressable> : null}
         </>}
         {type === 'transfer' ? <AppTextField keyboardType="decimal-pad" label={`${t('transferFee')} (${t('optional')})`} onChangeText={setFeeAmount} value={feeAmount} /> : null}
-        {type !== 'transfer' && transactionCurrency && baseCurrency && transactionCurrency !== baseCurrency ? <AppTextField keyboardType="decimal-pad" label={`${t('manualRate')} · 1 ${transactionCurrency} = ? ${baseCurrency} (${t('optional')})`} onChangeText={setManualRate} placeholder={t('automaticRate')} value={manualRate} /> : null}
-        <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
-        <AppTextField autoCapitalize="none" label={t('transactionDate')} onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setShowDetails((value) => !value)} style={styles.detailsButton}>
+          <MaterialCommunityIcons color={theme.primary} name={showDetails ? 'chevron-up' : 'tune-variant'} size={21} />
+          <Text style={[styles.detailsLabel, { color: theme.primary }]}>{t(showDetails ? 'fewerDetails' : 'additionalDetails')}</Text>
+        </Pressable>
+        {showDetails ? <>
+          {type !== 'transfer' && transactionCurrency && baseCurrency && transactionCurrency !== baseCurrency ? <AppTextField keyboardType="decimal-pad" label={`${t('manualRate')} · 1 ${transactionCurrency} = ? ${baseCurrency} (${t('optional')})`} onChangeText={setManualRate} placeholder={t('automaticRate')} value={manualRate} /> : null}
+          <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
+          <AppTextField autoCapitalize="none" label={t('transactionDate')} onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
+        </> : null}
         <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />
       </>}
     </Screen>
@@ -368,4 +375,6 @@ const styles = StyleSheet.create({
   splitToggle: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   manageCategoriesButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44 },
   manageCategoriesLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  detailsButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, minHeight: 44 },
+  detailsLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
 });

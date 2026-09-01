@@ -94,17 +94,36 @@ export function convertMoney(value: Money, targetCurrency: MoneyCurrencyCode, ra
   return money(sign * rounded, targetCurrency);
 }
 
-export function formatMoney(value: Money, locale: string) {
+export type CurrencyDisplay = 'code' | 'symbol';
+
+const currencySymbols: Record<MoneyCurrencyCode, string> = {
+  CHF: '₣',
+  EUR: '€',
+  GBP: '£',
+  GEL: '₾',
+  JPY: '¥',
+  KWD: 'د.ك',
+  PLN: 'zł',
+  RUB: '₽',
+  TRY: '₺',
+  UAH: '₴',
+  USD: '$',
+};
+
+export function formatMoney(value: Money, locale: string, currencyDisplay: CurrencyDisplay = 'symbol') {
   const precision = getMinorUnit(value.currency);
   const scale = 10 ** precision;
   const numericAmount = Number(value.amountMinor) / scale;
   if (!Number.isSafeInteger(Number(value.amountMinor))) {
     throw new Error('Amount is too large for Intl formatting');
   }
-  return new Intl.NumberFormat(locale, {
+  const formatter = new Intl.NumberFormat(locale, {
     currency: value.currency,
+    currencyDisplay: currencyDisplay === 'code' ? 'code' : 'narrowSymbol',
     maximumFractionDigits: precision,
     minimumFractionDigits: precision,
     style: 'currency',
-  }).format(numericAmount);
+  });
+  if (currencyDisplay === 'code') return formatter.format(numericAmount);
+  return formatter.formatToParts(numericAmount).map((part) => part.type === 'currency' ? currencySymbols[value.currency] : part.value).join('');
 }

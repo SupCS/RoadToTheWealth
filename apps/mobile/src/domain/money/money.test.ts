@@ -63,6 +63,12 @@ describe('money', () => {
     expect(gel).toContain('₾');
   });
 
+  it('switches between currency symbols and ISO codes', () => {
+    expect(formatMoney(money(4200n, 'GEL'), 'en-US', 'symbol')).toContain('₾');
+    expect(formatMoney(money(4200n, 'UAH'), 'en-US', 'symbol')).toContain('₴');
+    expect(formatMoney(money(4200n, 'GEL'), 'en-US', 'code')).toContain('GEL');
+  });
+
   it('rejects malformed values', () => {
     expect(() => parseMajorAmount('12.3.4', 'GEL')).toThrow('Invalid monetary amount');
     expect(() => deserializeMoney({ amountMinor: '10.5', currency: 'USD' })).toThrow('Invalid minor-unit amount');

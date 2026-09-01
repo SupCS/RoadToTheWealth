@@ -11,10 +11,12 @@ export default function SettingsScreen() {
     enabledCurrencies,
     financialScope,
     locale,
+    moneyDisplay,
     setBaseCurrency,
     setEnabledCurrencies,
     setFinancialScope,
     setLocale,
+    setMoneyDisplay,
     setThemeId,
     t,
     theme,
@@ -76,6 +78,15 @@ export default function SettingsScreen() {
       <Text style={[styles.hint, { color: theme.muted }]}>{t('financialScopeHint')}</Text>
 
       <Text style={[layoutStyles.sectionTitle, { color: theme.text }]}>{t('currencySettings')}</Text>
+      <Text style={[styles.label, { color: theme.muted }]}>{t('moneyDisplay')}</Text>
+      <View accessibilityRole="radiogroup" style={styles.wrap}>
+        {(['symbol', 'code'] as const).map((display) => <Pressable
+          accessibilityRole="radio" accessibilityState={{ checked: moneyDisplay === display }} key={display}
+          onPress={() => setMoneyDisplay(display)}
+          style={[styles.codePill, { backgroundColor: moneyDisplay === display ? theme.primary : theme.surface, borderColor: moneyDisplay === display ? theme.primary : theme.border }]}
+        ><Text style={[styles.codeText, { color: moneyDisplay === display ? theme.onPrimary : theme.text }]}>{t(display === 'symbol' ? 'currencySymbols' : 'currencyCodes')}</Text></Pressable>)}
+      </View>
+      <Text style={[styles.hint, styles.displayHint, { color: theme.muted }]}>{t('moneyDisplayHint')}</Text>
       <Text style={[styles.label, { color: theme.muted }]}>{t('baseCurrency')}</Text>
       <View style={styles.wrap}>
         {currencyCatalog.map((currency) => (
@@ -126,6 +137,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: 13, lineHeight: 19, marginTop: 18 },
   label: { fontSize: 13, fontWeight: '700', marginBottom: 10 },
   visibleLabel: { marginTop: 20 },
+  displayHint: { marginBottom: 20, marginTop: 10 },
   codePill: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 9 },
   checkPill: { alignItems: 'center', borderRadius: 12, borderWidth: 1, flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingVertical: 9 },
   checkMark: { fontSize: 14, fontWeight: '900' },
