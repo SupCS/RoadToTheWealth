@@ -84,6 +84,8 @@ export type TransactionSplit = AuditFields & Readonly<{
   amount: Money;
 }>;
 
+export type TransactionDetails = Readonly<{ transaction: Transaction; splits: TransactionSplit[] }>;
+
 export type TransferLink = AuditFields & Readonly<{
   householdId: string;
   debitTransactionId: string;
@@ -107,6 +109,8 @@ export interface LedgerRepository {
   saveCategory(category: Category): Promise<void>;
   listCategories(householdId: string): Promise<Category[]>;
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
+  getTransaction(transactionId: string): Promise<TransactionDetails | null>;
   listTransactions(householdId: string): Promise<Transaction[]>;
+  softDeleteTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void>;
   saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void>;
 }

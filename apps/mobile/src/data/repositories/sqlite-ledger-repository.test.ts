@@ -10,6 +10,7 @@ function createDatabase(rows: unknown[] = []) {
   };
   return {
     getAllAsync: vi.fn(async (..._args: unknown[]) => rows),
+    getFirstAsync: vi.fn(async (..._args: unknown[]) => rows[0] ?? null),
     runAsync: vi.fn(async (..._args: unknown[]) => ({ changes: 1, lastInsertRowId: 0 })),
     transactionDb,
     withExclusiveTransactionAsync: vi.fn(async (task: (db: typeof transactionDb) => Promise<void>) => task(transactionDb)),
@@ -135,7 +136,8 @@ describe('SQLiteLedgerRepository', () => {
     await repository.saveTransaction(transaction, splits);
 
     expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
-    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(3);
+    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(4);
+    expect(db.transactionDb.runAsync.mock.calls[0]?.[0]).toContain('ON CONFLICT(id) DO UPDATE');
   });
 
   it('rejects mismatched splits before starting a database transaction', async () => {
@@ -234,5 +236,19 @@ describe('SQLiteLedgerRepository', () => {
     expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(4);
     expect(db.transactionDb.runAsync.mock.calls[2]?.[0]).toContain('INSERT INTO transactions');
     expect(db.transactionDb.runAsync.mock.calls[3]?.flat()).toContain('fee-1');
+  });
+
+  it('soft-deletes an operation and any linked transfer group atomically', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+
+    await repository.softDeleteTransaction('transaction-1', '2026-09-02T00:00:00.000Z', 'member-1');
+
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
+    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(3);
+    expect(db.transactionDb.runAsync.mock.calls[0]?.[0]).toContain('UPDATE transactions SET deleted_at');
+    expect(db.transactionDb.runAsync.mock.calls[0]?.[0]).toContain('transfer_links');
+    expect(db.transactionDb.runAsync.mock.calls[1]?.[0]).toContain('UPDATE transaction_splits');
+    expect(db.transactionDb.runAsync.mock.calls[2]?.[0]).toContain('UPDATE transfer_links');
   });
 });

@@ -12,6 +12,7 @@ import type {
   HouseholdMember,
   LedgerRepository,
   Transaction,
+  TransactionDetails,
   TransactionSplit,
   TransferLink,
 } from './ledger-repository';
@@ -85,6 +86,12 @@ type TransactionRow = {
   reporting_amount_minor: string | null; reporting_currency_code: MoneyCurrencyCode | null;
   fx_rate_decimal: string | null; fx_provider: string | null; fx_requested_date: string | null; fx_effective_date: string | null;
   description: string | null; notes: string | null; created_at: string; updated_at: string;
+  created_by_member_id: string | null; updated_by_member_id: string | null; revision: number; deleted_at: string | null;
+};
+
+type TransactionSplitRow = {
+  id: string; household_id: string; transaction_id: string; category_id: string;
+  amount_minor: string; currency_code: MoneyCurrencyCode; created_at: string; updated_at: string;
   created_by_member_id: string | null; updated_by_member_id: string | null; revision: number; deleted_at: string | null;
 };
 
@@ -362,6 +369,11 @@ export class SQLiteLedgerRepository implements LedgerRepository {
 
     await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
       await insertTransaction(transactionDb, value);
+      await transactionDb.runAsync(
+        `UPDATE transaction_splits SET deleted_at = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE transaction_id = ? AND deleted_at IS NULL`,
+        value.updatedAt, value.updatedAt, value.updatedByMemberId, value.id,
+      );
 
       for (const split of splits) {
         await transactionDb.runAsync(
@@ -377,19 +389,49 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     });
   }
 
+  async getTransaction(transactionId: string): Promise<TransactionDetails | null> {
+    const row = await this.db.getFirstAsync<TransactionRow>(
+      `${transactionSelect} WHERE id = ? AND deleted_at IS NULL`, transactionId,
+    );
+    if (!row) return null;
+    const splitRows = await this.db.getAllAsync<TransactionSplitRow>(
+      `SELECT id, household_id, transaction_id, category_id, CAST(amount_minor AS TEXT) AS amount_minor,
+        currency_code, created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
+      FROM transaction_splits WHERE transaction_id = ? AND deleted_at IS NULL ORDER BY created_at`, transactionId,
+    );
+    return { transaction: mapTransaction(row), splits: splitRows.map(mapTransactionSplit) };
+  }
+
   async listTransactions(householdId: string): Promise<Transaction[]> {
     const rows = await this.db.getAllAsync<TransactionRow>(
-      `SELECT id, household_id, account_id, member_id, category_id, transaction_type,
-        transaction_date, posting_date, source, status, CAST(amount_minor AS TEXT) AS amount_minor,
-        currency_code, CAST(reporting_amount_minor AS TEXT) AS reporting_amount_minor,
-        reporting_currency_code, fx_rate_decimal, fx_provider, fx_requested_date, fx_effective_date,
-        description, notes, created_at, updated_at, created_by_member_id, updated_by_member_id,
-        revision, deleted_at
-      FROM transactions
-      WHERE household_id = ? AND deleted_at IS NULL
+      `${transactionSelect} WHERE household_id = ? AND deleted_at IS NULL
       ORDER BY transaction_date DESC, created_at DESC`, householdId,
     );
     return rows.map(mapTransaction);
+  }
+
+  async softDeleteTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void> {
+    const linkedIdsSql = `SELECT debit_transaction_id FROM transfer_links WHERE deleted_at IS NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)
+      UNION SELECT credit_transaction_id FROM transfer_links WHERE deleted_at IS NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)
+      UNION SELECT fee_transaction_id FROM transfer_links WHERE deleted_at IS NULL AND fee_transaction_id IS NOT NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)`;
+    await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
+      const ids = [transactionId, transactionId, transactionId, transactionId, transactionId, transactionId, transactionId, transactionId, transactionId];
+      await transactionDb.runAsync(
+        `UPDATE transactions SET deleted_at = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE deleted_at IS NULL AND (id = ? OR id IN (${linkedIdsSql}))`,
+        deletedAt, deletedAt, updatedByMemberId, transactionId, ...ids,
+      );
+      await transactionDb.runAsync(
+        `UPDATE transaction_splits SET deleted_at = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE deleted_at IS NULL AND (transaction_id = ? OR transaction_id IN (${linkedIdsSql}))`,
+        deletedAt, deletedAt, updatedByMemberId, transactionId, ...ids,
+      );
+      await transactionDb.runAsync(
+        `UPDATE transfer_links SET deleted_at = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+        WHERE deleted_at IS NULL AND (debit_transaction_id = ? OR credit_transaction_id = ? OR fee_transaction_id = ?)`,
+        deletedAt, deletedAt, updatedByMemberId, transactionId, transactionId, transactionId,
+      );
+    });
   }
 
   async saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void> {
@@ -416,6 +458,13 @@ export class SQLiteLedgerRepository implements LedgerRepository {
 
 type TransactionWriter = Pick<SQLiteDatabase, 'runAsync'>;
 
+const transactionSelect = `SELECT id, household_id, account_id, member_id, category_id, transaction_type,
+  transaction_date, posting_date, source, status, CAST(amount_minor AS TEXT) AS amount_minor,
+  currency_code, CAST(reporting_amount_minor AS TEXT) AS reporting_amount_minor,
+  reporting_currency_code, fx_rate_decimal, fx_provider, fx_requested_date, fx_effective_date,
+  description, notes, created_at, updated_at, created_by_member_id, updated_by_member_id,
+  revision, deleted_at FROM transactions`;
+
 async function insertTransaction(db: TransactionWriter, value: Transaction): Promise<void> {
   await db.runAsync(
     `INSERT INTO transactions (
@@ -424,7 +473,18 @@ async function insertTransaction(db: TransactionWriter, value: Transaction): Pro
       reporting_amount_minor, reporting_currency_code, fx_rate_decimal, fx_provider,
       fx_requested_date, fx_effective_date, description, notes, created_at, updated_at,
       created_by_member_id, updated_by_member_id, revision, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      account_id = excluded.account_id, member_id = excluded.member_id, category_id = excluded.category_id,
+      transaction_type = excluded.transaction_type, transaction_date = excluded.transaction_date,
+      posting_date = excluded.posting_date, status = excluded.status, amount_minor = excluded.amount_minor,
+      currency_code = excluded.currency_code, reporting_amount_minor = excluded.reporting_amount_minor,
+      reporting_currency_code = excluded.reporting_currency_code, fx_rate_decimal = excluded.fx_rate_decimal,
+      fx_provider = excluded.fx_provider, fx_requested_date = excluded.fx_requested_date,
+      fx_effective_date = excluded.fx_effective_date, description = excluded.description, notes = excluded.notes,
+      updated_at = excluded.updated_at, updated_by_member_id = excluded.updated_by_member_id,
+      revision = excluded.revision, deleted_at = excluded.deleted_at
+    WHERE excluded.revision > transactions.revision`,
     value.id, value.householdId, value.accountId, value.memberId, value.categoryId,
     value.transactionType, value.transactionDate, value.postingDate, value.source, value.status,
     value.originalAmount.amountMinor.toString(), value.originalAmount.currency,
@@ -542,6 +602,15 @@ function mapTransaction(row: TransactionRow): Transaction {
     description: row.description, notes: row.notes, createdAt: row.created_at, updatedAt: row.updated_at,
     createdByMemberId: row.created_by_member_id, updatedByMemberId: row.updated_by_member_id,
     revision: row.revision, deletedAt: row.deleted_at,
+  };
+}
+
+function mapTransactionSplit(row: TransactionSplitRow): TransactionSplit {
+  return {
+    id: row.id, householdId: row.household_id, transactionId: row.transaction_id,
+    categoryId: row.category_id, amount: money(BigInt(row.amount_minor), row.currency_code),
+    createdAt: row.created_at, updatedAt: row.updated_at, createdByMemberId: row.created_by_member_id,
+    updatedByMemberId: row.updated_by_member_id, revision: row.revision, deletedAt: row.deleted_at,
   };
 }
 

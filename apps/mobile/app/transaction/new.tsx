@@ -1,21 +1,22 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
-import { type Href, useRouter } from 'expo-router';
+import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { Account, Category, Transaction } from '@/src/data/repositories/ledger-repository';
+import type { Account, Category, Transaction, TransactionDetails } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { AppTextField, ErrorState, LoadingState, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
-import { money, parseMajorAmount } from '@/src/domain/money/money';
+import { money, parseMajorAmount, toMajorAmountInput } from '@/src/domain/money/money';
 import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
 import { useSettings } from '@/src/settings/settings-context';
 
 type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income' | 'transfer'>;
 
 export default function NewTransactionScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const db = useSQLiteContext();
   const repository = useMemo(() => new SQLiteLedgerRepository(db), [db]);
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function NewTransactionScreen() {
   const [memberId, setMemberId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [existing, setExisting] = useState<TransactionDetails | null>(null);
   const [type, setType] = useState<EntryType>('expense');
   const [accountId, setAccountId] = useState('');
   const [transactionCurrency, setTransactionCurrency] = useState<MoneyCurrencyCode | null>(null);
@@ -45,8 +47,9 @@ export default function NewTransactionScreen() {
     try {
       const household = await repository.getActiveHousehold();
       if (!household) throw new Error('Household missing');
-      const [member, allAccounts, allCategories] = await Promise.all([
+      const [member, allAccounts, allCategories, details] = await Promise.all([
         repository.getActiveMember(household.id), repository.listAccounts(household.id), repository.listCategories(household.id),
+        id ? repository.getTransaction(id) : Promise.resolve(null),
       ]);
       if (!member) throw new Error('Member missing');
       const activeAccounts = allAccounts.filter((account) => !account.isArchived);
@@ -57,13 +60,35 @@ export default function NewTransactionScreen() {
       setCategories(allCategories.filter((category) => !category.isArchived));
       setAccountId((current) => activeAccounts.some((account) => account.id === current) ? current : activeAccounts[0]?.id ?? '');
       setTransactionCurrency((current) => current ?? activeAccounts[0]?.openingBalances[0]?.currency ?? null);
+      if (id && !details) throw new Error('Transaction missing');
+      if (details) {
+        if (details.transaction.transactionType === 'transfer') throw new Error('Transfer editing is not supported here');
+        const transaction = details.transaction;
+        const absoluteAmount = transaction.originalAmount.amountMinor < 0n ? -transaction.originalAmount.amountMinor : transaction.originalAmount.amountMinor;
+        setExisting(details);
+        setType(transaction.transactionType as EntryType);
+        setAccountId(transaction.accountId);
+        setTransactionCurrency(transaction.originalAmount.currency);
+        setAmount(toMajorAmountInput(money(absoluteAmount, transaction.originalAmount.currency)));
+        setDate(transaction.transactionDate);
+        setDescription(transaction.description ?? '');
+        setCategoryId(transaction.categoryId ?? '');
+        if (details.splits.length > 0) {
+          setSplitEnabled(true);
+          setSplitCategoryIds(details.splits.map((split) => split.categoryId));
+          setSplitAmounts(Object.fromEntries(details.splits.map((split) => {
+            const absoluteSplit = split.amount.amountMinor < 0n ? -split.amount.amountMinor : split.amount.amountMinor;
+            return [split.categoryId, toMajorAmountInput(money(absoluteSplit, split.amount.currency))];
+          })));
+        }
+      }
       setStatus('ready');
     } catch {
       setStatus('error');
     }
   }
 
-  useEffect(() => { void load(); }, [repository]);
+  useEffect(() => { void load(); }, [id, repository]);
   const applicableCategories = categories.filter((category) => category.applicability === type || category.applicability === 'both');
   const sourceAccount = accounts.find((account) => account.id === accountId);
   const destinationAccounts = accounts.filter((account) => account.id !== accountId && account.openingBalances.some((balance) => balance.currency === transactionCurrency));
@@ -146,7 +171,7 @@ export default function NewTransactionScreen() {
         router.replace('/transactions' as Href);
         return;
       }
-      const transactionId = Crypto.randomUUID();
+      const transactionId = existing?.transaction.id ?? Crypto.randomUUID();
       const splits = [];
       if (splitEnabled) {
         if (splitCategoryIds.length < 2) {
@@ -183,8 +208,10 @@ export default function NewTransactionScreen() {
         transactionType: type, transactionDate: date, postingDate: null, source: 'manual',
         status: isBaseCurrency ? 'confirmed' : 'fx_pending', originalAmount: signedAmount,
         reportingAmount: isBaseCurrency ? signedAmount : null, fxSnapshot: null,
-        description: description.trim() || null, notes: null, createdAt: now, updatedAt: now,
-        createdByMemberId: memberId, updatedByMemberId: memberId, revision: 1, deletedAt: null,
+        description: description.trim() || null, notes: existing?.transaction.notes ?? null,
+        createdAt: existing?.transaction.createdAt ?? now, updatedAt: now,
+        createdByMemberId: existing?.transaction.createdByMemberId ?? memberId, updatedByMemberId: memberId,
+        revision: (existing?.transaction.revision ?? 0) + 1, deletedAt: null,
       }, splits);
       router.replace('/transactions' as Href);
     } catch {
@@ -202,7 +229,7 @@ export default function NewTransactionScreen() {
         <MaterialCommunityIcons color={theme.primary} name="arrow-left" size={24} />
         <Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text>
       </Pressable>
-      <ScreenHeader title={t('addTransaction')} />
+      <ScreenHeader title={existing ? t('editTransaction') : t('addTransaction')} />
       <ChoiceGroup label={t('transactionType')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('transfer'), value: 'transfer' }]} selected={type} onSelect={(value) => changeType(value as EntryType)} />
       {accounts.length === 0 ? <ErrorState message={t('noActiveAccountsForTransaction')} /> : <>
         <AppTextField error={validationError ?? undefined} keyboardType="decimal-pad" label={t('amount')} onChangeText={setAmount} placeholder="0.00" value={amount} />

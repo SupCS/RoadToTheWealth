@@ -2,7 +2,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Account, Transaction } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
@@ -14,7 +14,7 @@ import { useSettings } from '@/src/settings/settings-context';
 type LoadState =
   | { status: 'loading' }
   | { status: 'error' }
-  | { status: 'ready'; accounts: Account[]; transactions: Transaction[] };
+  | { status: 'ready'; accounts: Account[]; memberId: string | null; transactions: Transaction[] };
 
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
@@ -28,13 +28,13 @@ export default function TransactionsScreen() {
     try {
       const household = await repository.getActiveHousehold();
       if (!household) {
-        setState({ status: 'ready', accounts: [], transactions: [] });
+        setState({ status: 'ready', accounts: [], memberId: null, transactions: [] });
         return;
       }
-      const [accounts, transactions] = await Promise.all([
-        repository.listAccounts(household.id), repository.listTransactions(household.id),
+      const [accounts, member, transactions] = await Promise.all([
+        repository.listAccounts(household.id), repository.getActiveMember(household.id), repository.listTransactions(household.id),
       ]);
-      setState({ status: 'ready', accounts, transactions });
+      setState({ status: 'ready', accounts, memberId: member?.id ?? null, transactions });
     } catch {
       setState({ status: 'error' });
     }
@@ -61,15 +61,23 @@ export default function TransactionsScreen() {
         {transactions.map((transaction) => {
           const account = state.accounts.find((candidate) => candidate.id === transaction.accountId);
           const tone = transaction.originalAmount.amountMinor < 0n ? 'danger' : 'positive';
-          return <Card key={transaction.id}>
+          const editable = transaction.transactionType === 'expense' || transaction.transactionType === 'income';
+          return <Pressable disabled={!editable} key={transaction.id} onPress={() => router.push(`/transaction/new?id=${transaction.id}`)} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
+          <Card>
             <View style={styles.row}>
               <View style={styles.details}>
                 <Text style={[styles.transactionTitle, { color: theme.text }]}>{transaction.description || t(transactionTypeKey[transaction.transactionType])}</Text>
                 <Text style={[styles.meta, { color: theme.muted }]}>{account?.name ?? t('unknownAccount')}{transaction.status === 'fx_pending' ? ` · ${t('fxPending')}` : ''}</Text>
               </View>
               <MoneyText locale={locale} tone={tone} value={transaction.originalAmount} variant="metric" />
+              {state.memberId ? <Pressable accessibilityLabel={t('deleteTransaction')} accessibilityRole="button" hitSlop={8} onPress={(event) => { event.stopPropagation(); Alert.alert(t('deleteTransaction'), t('deleteTransactionConfirm'), [
+                { text: t('cancel'), style: 'cancel' },
+                { text: t('delete'), style: 'destructive', onPress: () => void repository.softDeleteTransaction(transaction.id, new Date().toISOString(), state.memberId!).then(load).catch(() => Alert.alert(t('transactionDeleteError'))) },
+              ]); }} style={styles.deleteButton}>
+                <MaterialCommunityIcons color={theme.danger} name="trash-can-outline" size={22} />
+              </Pressable> : null}
             </View>
-          </Card>;
+          </Card></Pressable>;
         })}
       </View>) : null}
     </Screen>
@@ -95,4 +103,5 @@ const styles = StyleSheet.create({
   details: { flex: 1 },
   transactionTitle: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },
   meta: { fontSize: fontSizes.caption, marginTop: spacing.xs },
+  deleteButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 44 },
 });
