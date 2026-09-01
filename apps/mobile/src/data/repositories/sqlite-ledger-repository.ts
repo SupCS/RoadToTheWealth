@@ -367,18 +367,19 @@ export class SQLiteLedgerRepository implements LedgerRepository {
     });
   }
 
-  async saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink): Promise<void> {
-    assertTransferMatchesLegs(debit, credit, link);
+  async saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void> {
+    assertTransferMatchesLegs(debit, credit, link, fee);
     await this.db.withExclusiveTransactionAsync(async (transactionDb) => {
       await insertTransaction(transactionDb, debit);
       await insertTransaction(transactionDb, credit);
+      if (fee) await insertTransaction(transactionDb, fee);
       await transactionDb.runAsync(
         `INSERT INTO transfer_links (
-          id, household_id, debit_transaction_id, credit_transaction_id,
+          id, household_id, debit_transaction_id, credit_transaction_id, fee_transaction_id,
           sent_amount_minor, sent_currency_code, received_amount_minor, received_currency_code,
           created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        link.id, link.householdId, link.debitTransactionId, link.creditTransactionId,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        link.id, link.householdId, link.debitTransactionId, link.creditTransactionId, link.feeTransactionId,
         link.sentAmount.amountMinor.toString(), link.sentAmount.currency,
         link.receivedAmount.amountMinor.toString(), link.receivedAmount.currency,
         link.createdAt, link.updatedAt, link.createdByMemberId, link.updatedByMemberId,
@@ -419,7 +420,7 @@ function assertManualTransactionAmount(value: Transaction): void {
   }
 }
 
-function assertTransferMatchesLegs(debit: Transaction, credit: Transaction, link: TransferLink): void {
+function assertTransferMatchesLegs(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): void {
   if (debit.transactionType !== 'transfer' || credit.transactionType !== 'transfer') throw new Error('Both transfer legs must have transfer type');
   if (debit.householdId !== credit.householdId || link.householdId !== debit.householdId) throw new Error('Transfer legs must belong to one household');
   if (debit.accountId === credit.accountId) throw new Error('Transfer accounts must be different');
@@ -430,6 +431,14 @@ function assertTransferMatchesLegs(debit: Transaction, credit: Transaction, link
   if (debit.originalAmount.currency !== link.sentAmount.currency || -debit.originalAmount.amountMinor !== link.sentAmount.amountMinor) throw new Error('Debit leg must match sent amount');
   if (credit.originalAmount.currency !== link.receivedAmount.currency || credit.originalAmount.amountMinor !== link.receivedAmount.amountMinor) throw new Error('Credit leg must match received amount');
   if (debit.transactionDate !== credit.transactionDate) throw new Error('Transfer legs must use the same date');
+  if (fee) {
+    if (link.feeTransactionId !== fee.id) throw new Error('Transfer link must reference its fee');
+    if (fee.transactionType !== 'expense' || fee.accountId !== debit.accountId || fee.householdId !== debit.householdId) throw new Error('Transfer fee must be an expense on the source account');
+    if (fee.originalAmount.amountMinor >= 0n || fee.originalAmount.currency !== debit.originalAmount.currency) throw new Error('Transfer fee amount is invalid');
+    if (fee.transactionDate !== debit.transactionDate) throw new Error('Transfer fee must use the transfer date');
+  } else if (link.feeTransactionId !== null) {
+    throw new Error('Transfer fee link has no transaction');
+  }
 }
 
 function mapAccount(row: AccountRow, openingBalances: Money[]): Account {

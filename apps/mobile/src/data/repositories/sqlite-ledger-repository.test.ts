@@ -166,7 +166,7 @@ describe('SQLiteLedgerRepository', () => {
 
     await repository.saveTransfer(debit, credit, {
       id: 'transfer-1', householdId: 'household-1', debitTransactionId: debit.id,
-      creditTransactionId: credit.id, sentAmount: money(2500n, 'USD'), receivedAmount: money(2500n, 'USD'), ...audit,
+      creditTransactionId: credit.id, feeTransactionId: null, sentAmount: money(2500n, 'USD'), receivedAmount: money(2500n, 'USD'), ...audit,
     });
 
     expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
@@ -186,8 +186,34 @@ describe('SQLiteLedgerRepository', () => {
 
     await expect(repository.saveTransfer(debit, credit, {
       id: 'transfer-1', householdId: 'household-1', debitTransactionId: debit.id,
-      creditTransactionId: credit.id, sentAmount: money(2500n, 'USD'), receivedAmount: money(2300n, 'EUR'), ...audit,
+      creditTransactionId: credit.id, feeTransactionId: null, sentAmount: money(2500n, 'USD'), receivedAmount: money(2300n, 'EUR'), ...audit,
     })).rejects.toThrow('preserve amount and currency');
     expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();
+  });
+
+  it('writes a transfer fee as a separate expense in the same atomic operation', async () => {
+    const db = createDatabase();
+    const repository = new SQLiteLedgerRepository(db as never);
+    const debit = {
+      id: 'debit-1', householdId: 'household-1', accountId: 'account-1', memberId: 'member-1',
+      categoryId: null, transactionType: 'transfer', transactionDate: '2026-09-01', postingDate: null,
+      source: 'manual', status: 'confirmed', originalAmount: money(-2500n, 'USD'), reportingAmount: null,
+      fxSnapshot: null, description: null, notes: null, ...audit,
+    } as const;
+    const credit = { ...debit, id: 'credit-1', accountId: 'account-2', originalAmount: money(2500n, 'USD') } as const;
+    const fee = {
+      ...debit, id: 'fee-1', transactionType: 'expense', originalAmount: money(-125n, 'USD'), description: 'Transfer fee',
+    } as const;
+
+    await repository.saveTransfer(debit, credit, {
+      id: 'transfer-1', householdId: 'household-1', debitTransactionId: debit.id,
+      creditTransactionId: credit.id, feeTransactionId: fee.id, sentAmount: money(2500n, 'USD'),
+      receivedAmount: money(2500n, 'USD'), ...audit,
+    }, fee);
+
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledOnce();
+    expect(db.transactionDb.runAsync).toHaveBeenCalledTimes(4);
+    expect(db.transactionDb.runAsync.mock.calls[2]?.[0]).toContain('INSERT INTO transactions');
+    expect(db.transactionDb.runAsync.mock.calls[3]?.flat()).toContain('fee-1');
   });
 });

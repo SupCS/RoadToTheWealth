@@ -88,6 +88,7 @@ export type TransferLink = AuditFields & Readonly<{
   householdId: string;
   debitTransactionId: string;
   creditTransactionId: string;
+  feeTransactionId: string | null;
   sentAmount: Money;
   receivedAmount: Money;
 }>;
@@ -106,5 +107,5 @@ export interface LedgerRepository {
   saveCategory(category: Category): Promise<void>;
   listCategories(householdId: string): Promise<Category[]>;
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
-  saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink): Promise<void>;
+  saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void>;
 }

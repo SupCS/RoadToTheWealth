@@ -40,7 +40,7 @@ Required transaction data:
 - base-currency amount calculated from the immutable FX snapshot;
 - sync, review, and deletion states.
 
-Transfers link two legs and do not affect income/expense reports. They preserve one amount and currency across both legs. Currency exchange inside an account is a separate operation that preserves both exchanged amounts, the applied rate snapshot, and fees.
+Transfers link two legs and do not affect income/expense reports. They preserve one amount and currency across both legs. An optional transfer fee is stored as a separate linked expense on the source account. Currency exchange inside an account is a separate operation that preserves both exchanged amounts, the applied rate snapshot, and fees.
 
 ## 5. Multi-currency behavior
 

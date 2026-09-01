@@ -30,7 +30,11 @@ export default function NewTransactionScreen() {
   const [transactionCurrency, setTransactionCurrency] = useState<MoneyCurrencyCode | null>(null);
   const [destinationAccountId, setDestinationAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitCategoryIds, setSplitCategoryIds] = useState<string[]>([]);
+  const [splitAmounts, setSplitAmounts] = useState<Record<string, string>>({});
   const [amount, setAmount] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
   const [date, setDate] = useState(todayLocal());
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -105,6 +109,19 @@ export default function NewTransactionScreen() {
         }
         const debitId = Crypto.randomUUID();
         const creditId = Crypto.randomUUID();
+        let feeMoney = null;
+        if (feeAmount.trim()) {
+          try {
+            const parsedFee = parseMajorAmount(feeAmount, enteredAmount.currency);
+            if (parsedFee.amountMinor <= 0n) throw new Error('Fee must be positive');
+            feeMoney = money(-parsedFee.amountMinor, parsedFee.currency);
+          } catch {
+            setStatus('ready');
+            setValidationError(t('invalidTransferFee'));
+            return;
+          }
+        }
+        const feeId = feeMoney ? Crypto.randomUUID() : null;
         const common = {
           householdId, memberId, categoryId: null, transactionType: 'transfer' as const,
           transactionDate: date, postingDate: null, source: 'manual' as const, status: 'confirmed' as const,
@@ -115,21 +132,60 @@ export default function NewTransactionScreen() {
         await repository.saveTransfer(
           { ...common, id: debitId, accountId: account.id, originalAmount: money(-enteredAmount.amountMinor, enteredAmount.currency) },
           { ...common, id: creditId, accountId: destination.id, originalAmount: enteredAmount },
-          { id: Crypto.randomUUID(), householdId, debitTransactionId: debitId, creditTransactionId: creditId,
+          { id: Crypto.randomUUID(), householdId, debitTransactionId: debitId, creditTransactionId: creditId, feeTransactionId: feeId,
             sentAmount: enteredAmount, receivedAmount: enteredAmount, createdAt: now, updatedAt: now,
             createdByMemberId: memberId, updatedByMemberId: memberId, revision: 1, deletedAt: null },
+          feeMoney && feeId ? {
+            ...common, id: feeId, accountId: account.id, categoryId: null, transactionType: 'expense',
+            originalAmount: feeMoney,
+            reportingAmount: feeMoney.currency === baseCurrency ? feeMoney : null,
+            status: feeMoney.currency === baseCurrency ? 'confirmed' : 'fx_pending',
+            description: t('transferFee'),
+          } : undefined,
         );
         router.replace('/transactions' as Href);
         return;
       }
+      const transactionId = Crypto.randomUUID();
+      const splits = [];
+      if (splitEnabled) {
+        if (splitCategoryIds.length < 2) {
+          setStatus('ready');
+          setValidationError(t('splitNeedsCategories'));
+          return;
+        }
+        let splitTotal = 0n;
+        for (const selectedCategoryId of splitCategoryIds) {
+          try {
+            const splitAmount = parseMajorAmount(splitAmounts[selectedCategoryId] ?? '', enteredAmount.currency);
+            if (splitAmount.amountMinor <= 0n) throw new Error('Split must be positive');
+            splitTotal += splitAmount.amountMinor;
+            splits.push({
+              id: Crypto.randomUUID(), householdId, transactionId, categoryId: selectedCategoryId,
+              amount: money(type === 'expense' ? -splitAmount.amountMinor : splitAmount.amountMinor, splitAmount.currency),
+              createdAt: now, updatedAt: now, createdByMemberId: memberId, updatedByMemberId: memberId,
+              revision: 1, deletedAt: null,
+            });
+          } catch {
+            setStatus('ready');
+            setValidationError(t('invalidSplitAmount'));
+            return;
+          }
+        }
+        if (splitTotal !== enteredAmount.amountMinor) {
+          setStatus('ready');
+          setValidationError(t('splitTotalMismatch'));
+          return;
+        }
+      }
       await repository.saveTransaction({
-        id: Crypto.randomUUID(), householdId, accountId: account.id, memberId, categoryId: categoryId || null,
+        id: transactionId, householdId, accountId: account.id, memberId, categoryId: splitEnabled ? null : categoryId || null,
         transactionType: type, transactionDate: date, postingDate: null, source: 'manual',
         status: isBaseCurrency ? 'confirmed' : 'fx_pending', originalAmount: signedAmount,
         reportingAmount: isBaseCurrency ? signedAmount : null, fxSnapshot: null,
         description: description.trim() || null, notes: null, createdAt: now, updatedAt: now,
         createdByMemberId: memberId, updatedByMemberId: memberId, revision: 1, deletedAt: null,
-      }, []);
+      }, splits);
       router.replace('/transactions' as Href);
     } catch {
       setStatus('ready');
@@ -161,7 +217,20 @@ export default function NewTransactionScreen() {
           destinationAccounts.length > 0
             ? <ChoiceGroup label={t('destinationAccount')} options={destinationAccounts.map((account) => ({ label: account.name, value: account.id }))} selected={destinationAccountId} onSelect={setDestinationAccountId} />
             : <ErrorState message={t('noCompatibleDestinationAccount')} />
-        ) : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: category.names[locale], value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
+        ) : <>
+          <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: splitEnabled }} onPress={() => { setSplitEnabled((value) => !value); setCategoryId(''); }} style={[styles.splitToggle, { borderColor: splitEnabled ? theme.primary : theme.border, backgroundColor: splitEnabled ? theme.primary : theme.surface }]}>
+            <MaterialCommunityIcons color={splitEnabled ? theme.onPrimary : theme.text} name={splitEnabled ? 'checkbox-marked-outline' : 'checkbox-blank-outline'} size={22} />
+            <Text style={[styles.choiceLabel, { color: splitEnabled ? theme.onPrimary : theme.text }]}>{t('splitTransaction')}</Text>
+          </Pressable>
+          {splitEnabled ? <>
+            <MultiChoiceGroup label={t('splitCategories')} options={applicableCategories.map((category) => ({ label: categoryLabel(category, categories, locale), value: category.id }))} selected={splitCategoryIds} onToggle={(value) => {
+              setSplitCategoryIds((current) => current.includes(value) ? current.filter((id) => id !== value) : [...current, value]);
+              setSplitAmounts((current) => ({ ...current, [value]: current[value] ?? '' }));
+            }} />
+            {splitCategoryIds.map((id) => <AppTextField key={id} keyboardType="decimal-pad" label={`${categoryLabel(categories.find((category) => category.id === id)!, categories, locale)} · ${t('amount')}`} onChangeText={(value) => setSplitAmounts((current) => ({ ...current, [id]: value }))} value={splitAmounts[id] ?? ''} />)}
+          </> : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: categoryLabel(category, categories, locale), value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
+        </>}
+        {type === 'transfer' ? <AppTextField keyboardType="decimal-pad" label={`${t('transferFee')} (${t('optional')})`} onChangeText={setFeeAmount} value={feeAmount} /> : null}
         <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
         <AppTextField autoCapitalize="none" label={t('transactionDate')} onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
         <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />
@@ -186,6 +255,26 @@ function ChoiceGroup({ label, onSelect, optionalLabel, options, selected }: {
   </View>;
 }
 
+function MultiChoiceGroup({ label, onToggle, options, selected }: {
+  label: string; onToggle: (value: string) => void; options: { label: string; value: string }[]; selected: string[];
+}) {
+  const { theme } = useSettings();
+  return <View style={styles.group}>
+    <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
+    <View style={styles.choices}>{options.map((option) => {
+      const active = selected.includes(option.value);
+      return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: active }} key={option.value} onPress={() => onToggle(option.value)} style={[styles.choice, { backgroundColor: active ? theme.primary : theme.surface, borderColor: active ? theme.primary : theme.border }]}>
+        <Text style={[styles.choiceLabel, { color: active ? theme.onPrimary : theme.text }]}>{option.label}</Text>
+      </Pressable>;
+    })}</View>
+  </View>;
+}
+
+function categoryLabel(category: Category, categories: Category[], locale: 'en' | 'uk' | 'ru'): string {
+  const parent = category.parentId ? categories.find((candidate) => candidate.id === category.parentId) : null;
+  return parent ? `${parent.names[locale]} › ${category.names[locale]}` : category.names[locale];
+}
+
 function todayLocal(): string {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
@@ -205,4 +294,5 @@ const styles = StyleSheet.create({
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: { borderRadius: radii.lg, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  splitToggle: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
 });

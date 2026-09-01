@@ -12,7 +12,7 @@ This is the conceptual schema; database migrations will become authoritative onc
 - `categories`: localized/custom label metadata, parent, income/expense applicability.
 - `transactions`: type, dates, source, status, original money, reporting snapshot, description.
 - `transaction_splits`: category allocations whose sum equals the transaction amount.
-- `transfer_links`: links debit/credit legs and cross-currency details.
+- `transfer_links`: links debit/credit legs and an optional separate fee expense.
 - `fx_rate_snapshots`: provider and effective historical rate.
 - `import_batches`: parser/template/report metadata, never the raw file by default.
 - `import_rows`: source fingerprint, normalized result, review outcome.

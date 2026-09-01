@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 6;
+export const DATABASE_VERSION = 7;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -252,6 +252,14 @@ const migrations = [
     sql: `
       ALTER TABLE accounts ADD COLUMN primary_currency_code TEXT;
       UPDATE accounts SET primary_currency_code = currency_code WHERE primary_currency_code IS NULL;
+    `,
+  },
+  {
+    version: 7,
+    sql: `
+      ALTER TABLE transfer_links ADD COLUMN fee_transaction_id TEXT REFERENCES transactions(id);
+      CREATE UNIQUE INDEX transfer_links_fee_transaction_idx
+        ON transfer_links(fee_transaction_id) WHERE fee_transaction_id IS NOT NULL;
     `,
   },
 ] as const;
