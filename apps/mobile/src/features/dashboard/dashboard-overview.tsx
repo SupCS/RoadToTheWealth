@@ -3,6 +3,7 @@ import { type Href, useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
 import type { Account, Category, Transaction } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
@@ -15,6 +16,7 @@ import { formatDate } from '@/src/i18n/formatters';
 import { useSettings } from '@/src/settings/settings-context';
 
 type Period = 'day' | 'week' | 'month' | 'year';
+type CategoryView = 'list' | 'bar' | 'donut' | 'treemap';
 type ReadyState = {
   accounts: Account[];
   balances: Money[];
@@ -34,6 +36,7 @@ export function DashboardOverview() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reportingAmounts, setReportingAmounts] = useState<Record<string, Money>>({});
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
+  const [categoryView, setCategoryView] = useState<CategoryView>('list');
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -118,24 +121,25 @@ export function DashboardOverview() {
 
     <View style={styles.sectionHeading}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('spendingByCategory')}</Text>
-      <Text style={[styles.sectionMeta, { color: theme.muted }]}>{baseCurrency}</Text>
+      <View accessibilityRole="radiogroup" style={[styles.categoryViewPicker, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        {categoryViewOptions.map((option) => { const active = categoryView === option.value; return <Pressable accessibilityLabel={t(option.label)} accessibilityRole="radio" accessibilityState={{ checked: active }} key={option.value} onPress={() => setCategoryView(option.value)} style={[styles.categoryViewOption, active && { backgroundColor: theme.primary }]}>
+          <MaterialCommunityIcons color={active ? theme.onPrimary : theme.muted} name={option.icon} size={17} />
+        </Pressable>; })}
+      </View>
     </View>
-    {categoryRows.length ? <Card>{categoryRows.slice(0, 6).map((row, index) => { const expanded = expandedCategoryIds.has(row.id); return <Fragment key={row.id}>
-      <CategorySpendingRow baseCurrency={baseCurrency} expanded={expanded} first={index === 0} locale={locale} onPress={row.children.length ? () => setExpandedCategoryIds((current) => { const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; }) : undefined} row={row} />
-      {expanded ? row.children.map((child) => <CategorySpendingRow baseCurrency={baseCurrency} child key={child.id} locale={locale} row={child} />) : null}
-    </Fragment>; })}</Card> : <Card><Text style={[styles.emptyText, { color: theme.muted }]}>{t('noSpendingInPeriod')}</Text></Card>}
+    {categoryRows.length ? <CategoryVisualization baseCurrency={baseCurrency} expandedCategoryIds={expandedCategoryIds} locale={locale} rows={categoryRows.slice(0, 6)} setExpandedCategoryIds={setExpandedCategoryIds} view={categoryView} /> : <Card><Text style={[styles.emptyText, { color: theme.muted }]}>{t('noSpendingInPeriod')}</Text></Card>}
 
     <View style={styles.sectionHeading}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>{t('recent')}</Text>
       <Pressable accessibilityRole="button" onPress={() => router.push('/transactions' as Href)}><Text style={[styles.seeAll, { color: theme.primary }]}>{t('seeAll')}</Text></Pressable>
     </View>
-    {recent.length ? recent.map((transaction) => <Pressable key={transaction.id} onPress={() => router.push(`/transaction/new?id=${transaction.id}`)} style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}>
+    {recent.length ? recent.map((transaction) => { const category = state.categories.find((candidate) => candidate.id === transaction.categoryId); return <Pressable key={transaction.id} onPress={() => router.push(`/transaction/new?id=${transaction.id}`)} style={({ pressed }) => ({ opacity: pressed ? 0.72 : 1 })}>
       <View style={[styles.recentRow, { borderBottomColor: theme.border }]}>
-        <View style={[styles.recentIcon, { backgroundColor: theme.surface }]}><MaterialCommunityIcons color={theme.primary} name={transaction.transactionType === 'income' ? 'arrow-down-left' : 'arrow-up-right'} size={21} /></View>
+        <View style={[styles.recentAccent, { backgroundColor: resolveCategoryColor(theme, category?.colorToken ?? null) }]} />
         <View style={styles.recentMain}><Text numberOfLines={1} style={[styles.recentTitle, { color: theme.text }]}>{transaction.description || t(transaction.transactionType === 'income' ? 'income' : 'expense')}</Text><Text style={[styles.recentDate, { color: theme.muted }]}>{formatDate(transaction.transactionDate, locale)}</Text></View>
         <MoneyText locale={locale} tone={transaction.originalAmount.amountMinor < 0n ? 'danger' : 'positive'} value={transaction.originalAmount} />
       </View>
-    </Pressable>) : <Card><Text style={[styles.emptyText, { color: theme.muted }]}>{t('noTransactionsHint')}</Text></Card>}
+    </Pressable>; }) : <Card><Text style={[styles.emptyText, { color: theme.muted }]}>{t('noTransactionsHint')}</Text></Card>}
   </>;
 }
 
@@ -151,6 +155,62 @@ function SummaryMetric({ icon, label, tone, value }: { icon: 'arrow-up-right' | 
 }
 
 type CategoryRow = { amountMinor: bigint; children: CategoryRow[]; colorToken: string | null; icon: string | null; iconColor: string | null; id: string; name: string; percent: number };
+
+function CategoryVisualization({ baseCurrency, expandedCategoryIds, locale, rows, setExpandedCategoryIds, view }: { baseCurrency: Money['currency']; expandedCategoryIds: Set<string>; locale: 'en' | 'uk' | 'ru'; rows: CategoryRow[]; setExpandedCategoryIds: (update: (current: Set<string>) => Set<string>) => void; view: CategoryView }) {
+  if (view === 'list') return <Card>{rows.map((row, index) => { const expanded = expandedCategoryIds.has(row.id); return <Fragment key={row.id}>
+    <CategorySpendingRow baseCurrency={baseCurrency} expanded={expanded} first={index === 0} locale={locale} onPress={row.children.length ? () => setExpandedCategoryIds((current) => { const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; }) : undefined} row={row} />
+    {expanded ? row.children.map((child) => <CategorySpendingRow baseCurrency={baseCurrency} child key={child.id} locale={locale} row={child} />) : null}
+  </Fragment>; })}</Card>;
+  if (view === 'treemap') return <CategoryTreemap rows={rows} />;
+  return <Card>
+    {view === 'bar' ? <CategoryBar rows={rows} /> : <CategoryDonut baseCurrency={baseCurrency} locale={locale} rows={rows} />}
+    <CategoryLegend baseCurrency={baseCurrency} locale={locale} rows={rows} />
+  </Card>;
+}
+
+function CategoryBar({ rows }: { rows: CategoryRow[] }) {
+  const { t, theme } = useSettings();
+  const totalPercent = rows.reduce((total, row) => total + row.percent, 0) || 1;
+  return <View accessibilityLabel={t('categoryViewBar')} accessibilityRole="image" style={[styles.categoryBar, { backgroundColor: theme.background }]}>{rows.map((row) => <View key={row.id} style={{ backgroundColor: resolveCategoryColor(theme, row.colorToken), flex: row.percent / totalPercent }} />)}</View>;
+}
+
+function CategoryDonut({ baseCurrency, locale, rows }: { baseCurrency: Money['currency']; locale: 'en' | 'uk' | 'ru'; rows: CategoryRow[] }) {
+  const { t, theme } = useSettings();
+  const size = 208;
+  const strokeWidth = 38;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const total = rows.reduce((sum, row) => sum + row.amountMinor, 0n);
+  let offset = 0;
+  return <View accessibilityLabel={t('categoryViewDonut')} accessibilityRole="image" style={styles.donutWrap}>
+    <Svg height={size} width={size}>
+      <Circle cx={size / 2} cy={size / 2} fill="none" r={radius} stroke={theme.background} strokeWidth={strokeWidth} />
+      {rows.map((row) => { const length = circumference * (row.percent / 100); const dashOffset = -offset; offset += length; return <Circle cx={size / 2} cy={size / 2} fill="none" key={row.id} r={radius} rotation={-90} origin={`${size / 2}, ${size / 2}`} stroke={resolveCategoryColor(theme, row.colorToken)} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={dashOffset} strokeWidth={strokeWidth} />; })}
+    </Svg>
+    <View pointerEvents="none" style={styles.donutCenter}>
+      <Text style={[styles.donutLabel, { color: theme.muted }]}>{t('spent')}</Text>
+      <MoneyText locale={locale} value={{ amountMinor: total, currency: baseCurrency }} variant="metric" />
+      <Text style={[styles.donutMeta, { color: theme.muted }]}>{rows.length} {t('categoriesCount')}</Text>
+    </View>
+  </View>;
+}
+
+function CategoryLegend({ baseCurrency, locale, rows }: { baseCurrency: Money['currency']; locale: 'en' | 'uk' | 'ru'; rows: CategoryRow[] }) {
+  const { theme } = useSettings();
+  return <View style={styles.categoryLegend}>{rows.map((row) => <View key={row.id} style={[styles.legendItem, { borderTopColor: theme.border }]}>
+    <View style={styles.legendHeading}><View style={[styles.legendDot, { backgroundColor: resolveCategoryColor(theme, row.colorToken) }]} /><Text numberOfLines={1} style={[styles.legendName, { color: theme.text }]}>{row.name}</Text></View>
+    <View style={styles.legendValue}><MoneyText locale={locale} value={{ amountMinor: row.amountMinor, currency: baseCurrency }} /><Text style={[styles.legendPercent, { color: theme.muted }]}>{row.percent}%</Text></View>
+  </View>)}</View>;
+}
+
+function CategoryTreemap({ rows }: { rows: CategoryRow[] }) {
+  const { t, theme } = useSettings();
+  const bands = [rows.slice(0, 1), rows.slice(1, 3), rows.slice(3, 6)].filter((band) => band.length);
+  return <View accessibilityLabel={t('categoryViewTreemap')} accessibilityRole="image" style={[styles.treemap, { backgroundColor: theme.background }]}>{bands.map((band, bandIndex) => <View key={bandIndex} style={[styles.treemapBand, { flex: band.reduce((sum, row) => sum + row.percent, 0) }]}>{band.map((row) => { const color = resolveCategoryColor(theme, row.colorToken); return <View key={row.id} style={[styles.treemapTile, { backgroundColor: color, borderColor: theme.background, flex: row.percent }]}>
+    <Text numberOfLines={2} style={[styles.treemapName, { color: resolveCategoryForeground(theme, row.colorToken, null) }]}>{row.name}</Text>
+    <Text style={[styles.treemapPercent, { color: resolveCategoryForeground(theme, row.colorToken, null) }]}>{row.percent}%</Text>
+  </View>; })}</View>)}</View>;
+}
 
 function CategorySpendingRow({ baseCurrency, child = false, expanded = false, first = false, locale, onPress, row }: { baseCurrency: Money['currency']; child?: boolean; expanded?: boolean; first?: boolean; locale: 'en' | 'uk' | 'ru'; onPress?: () => void; row: CategoryRow }) {
   const { theme } = useSettings();
@@ -209,6 +269,12 @@ function getPeriodRange(period: Period) {
 }
 
 const periodKey = { day: 'periodDay', week: 'periodWeek', month: 'periodMonth', year: 'periodYear' } as const;
+const categoryViewOptions = [
+  { icon: 'format-list-bulleted', label: 'categoryViewList', value: 'list' },
+  { icon: 'chart-bar-stacked', label: 'categoryViewBar', value: 'bar' },
+  { icon: 'chart-donut', label: 'categoryViewDonut', value: 'donut' },
+  { icon: 'view-grid-outline', label: 'categoryViewTreemap', value: 'treemap' },
+] as const;
 
 const styles = StyleSheet.create({
   scopePicker: { borderRadius: radii.pill, borderWidth: 1, flexDirection: 'row', marginBottom: spacing.md, padding: spacing.xs },
@@ -229,8 +295,26 @@ const styles = StyleSheet.create({
   metricLabel: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs },
   metricLabelText: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
   sectionHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md, marginTop: spacing.xxl },
-  sectionTitle: { fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold },
-  sectionMeta: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
+  sectionTitle: { flex: 1, fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold },
+  categoryViewPicker: { borderRadius: radii.pill, borderWidth: 1, flexDirection: 'row', padding: spacing.xxs },
+  categoryViewOption: { alignItems: 'center', borderRadius: radii.pill, height: 34, justifyContent: 'center', width: 34 },
+  categoryBar: { borderRadius: radii.sm, flexDirection: 'row', height: 44, marginBottom: spacing.lg, overflow: 'hidden' },
+  categoryLegend: { flexDirection: 'row', flexWrap: 'wrap' },
+  legendItem: { borderTopWidth: StyleSheet.hairlineWidth, gap: spacing.xs, paddingVertical: spacing.md, width: '50%' },
+  legendHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, paddingRight: spacing.sm },
+  legendDot: { borderRadius: 2, height: 8, width: 8 },
+  legendName: { flex: 1, fontSize: fontSizes.label, fontWeight: fontWeights.bold },
+  legendValue: { alignItems: 'center', flexDirection: 'row', gap: spacing.xs, paddingLeft: spacing.lg },
+  legendPercent: { fontSize: fontSizes.caption },
+  donutWrap: { alignItems: 'center', alignSelf: 'center', height: 208, justifyContent: 'center', marginBottom: spacing.lg, width: 208 },
+  donutCenter: { alignItems: 'center', justifyContent: 'center', position: 'absolute' },
+  donutLabel: { fontSize: fontSizes.caption, fontWeight: fontWeights.extraBold, letterSpacing: 1.5, textTransform: 'uppercase' },
+  donutMeta: { fontSize: fontSizes.caption, marginTop: spacing.xs },
+  treemap: { borderRadius: radii.lg, height: 280, overflow: 'hidden' },
+  treemapBand: { flexDirection: 'row' },
+  treemapTile: { borderWidth: 2, minWidth: 68, padding: spacing.md },
+  treemapName: { fontSize: fontSizes.label, fontWeight: fontWeights.extraBold },
+  treemapPercent: { fontSize: fontSizes.caption, marginTop: spacing.xs },
   categoryRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, minHeight: 64, paddingVertical: spacing.sm },
   childCategoryRow: { marginLeft: spacing.xl, minHeight: 54 },
   categoryIcon: { alignItems: 'center', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
@@ -245,7 +329,7 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: fontSizes.body, lineHeight: 22, textAlign: 'center' },
   seeAll: { fontSize: fontSizes.label, fontWeight: fontWeights.extraBold, minHeight: 44, paddingTop: spacing.md },
   recentRow: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: spacing.md, minHeight: 68 },
-  recentIcon: { alignItems: 'center', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
+  recentAccent: { borderRadius: 2, height: 42, width: 4 },
   recentMain: { flex: 1 },
   recentTitle: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   recentDate: { fontSize: fontSizes.caption, marginTop: spacing.xs },

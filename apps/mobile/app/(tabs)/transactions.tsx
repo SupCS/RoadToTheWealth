@@ -106,7 +106,11 @@ export default function TransactionsScreen() {
       /> : null}
       {state.status === 'ready' && state.transactions.length > 0 && visibleTransactions.length === 0 ? <EmptyState description={t('noMatchingTransactionsHint')} icon={<MaterialCommunityIcons color={theme.primary} name="magnify" size={46} />} title={t('noMatchingTransactions')} /> : null}
       {state.status === 'ready' ? groupByDate(visibleTransactions).map(([date, transactions]) => <View key={date} style={styles.dateGroup}>
-        <Text style={[styles.date, { color: theme.muted }]}>{formatDate(date, locale)}</Text>
+        <View style={[styles.dateHeader, { borderBottomColor: theme.border }]}>
+          <Text style={[styles.date, { color: theme.muted }]}>{formatDateGroup(date, locale, t)}</Text>
+          <MoneyText locale={locale} tone={getDailyTotal(transactions, reportingAmounts, baseCurrency) < 0n ? 'danger' : getDailyTotal(transactions, reportingAmounts, baseCurrency) > 0n ? 'positive' : 'default'} value={{ amountMinor: getDailyTotal(transactions, reportingAmounts, baseCurrency), currency: baseCurrency }} />
+        </View>
+        <View style={[styles.dayTransactions, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         {transactions.map((transaction) => {
           const account = state.accounts.find((candidate) => candidate.id === transaction.accountId);
           const category = state.categories.find((candidate) => candidate.id === transaction.categoryId);
@@ -115,8 +119,7 @@ export default function TransactionsScreen() {
           const editable = transaction.transactionType === 'expense' || transaction.transactionType === 'income';
           const reportingAmount = reportingAmounts[transaction.id];
           return <Pressable key={transaction.id} onLongPress={() => showTransactionActions(transaction)} onPress={editable ? () => router.push(`/transaction/new?id=${transaction.id}`) : undefined} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
-          <Card>
-            <View style={styles.row}>
+            <View style={[styles.row, { borderBottomColor: theme.border }]}>
               <View style={[styles.transactionIcon, { backgroundColor: resolveCategoryColor(theme, category?.colorToken ?? null) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category?.colorToken ?? null, category?.iconColor ?? null)} name={category ? resolveCategoryIcon(category.icon) : 'swap-horizontal'} size={24} /></View>
               <View style={styles.details}>
                 <Text style={[styles.transactionTitle, { color: theme.text }]}>{category ? `${parentCategory ? `${parentCategory.names[locale]} › ` : ''}${category.names[locale]}` : t(transactionTypeKey[transaction.transactionType])}</Text>
@@ -131,8 +134,9 @@ export default function TransactionsScreen() {
                 </> : null}
               </View>
             </View>
-          </Card></Pressable>;
+          </Pressable>;
         })}
+        </View>
       </View>) : null}
       <Modal animationType="fade" onRequestClose={() => setFiltersOpen(false)} transparent visible={filtersOpen}>
         <Pressable accessibilityRole="button" accessibilityLabel={t('close')} onPress={() => setFiltersOpen(false)} style={[styles.modalBackdrop, { backgroundColor: `${theme.text}73` }]}>
@@ -182,6 +186,27 @@ function groupByDate(transactions: Transaction[]): [string, Transaction[]][] {
   return [...groups.entries()];
 }
 
+function getDailyTotal(transactions: Transaction[], reportingAmounts: Record<string, Transaction['originalAmount']>, baseCurrency: Transaction['originalAmount']['currency']) {
+  return transactions.reduce((total, transaction) => {
+    if (transaction.transactionType === 'transfer') return total;
+    const amount = reportingAmounts[transaction.id] ?? (transaction.originalAmount.currency === baseCurrency ? transaction.originalAmount : null);
+    return total + (amount?.amountMinor ?? 0n);
+  }, 0n);
+}
+
+function formatDateGroup(date: string, locale: 'en' | 'uk' | 'ru', t: (key: 'today' | 'yesterday') => string) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date === toIsoDate(today)) return t('today');
+  if (date === toIsoDate(yesterday)) return t('yesterday');
+  return formatDate(date, locale);
+}
+
+function toIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 const transactionTypeKey = {
   expense: 'expense', income: 'income', transfer: 'transfer', refund: 'refund',
   adjustment: 'adjustment', debt_payment: 'debtPayment',
@@ -190,9 +215,11 @@ const transactionTypeKey = {
 const styles = StyleSheet.create({
   addButton: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
   headerActions: { flexDirection: 'row', gap: spacing.sm }, headerIconButton: { alignItems: 'center', borderRadius: 22, borderWidth: 1, height: 44, justifyContent: 'center', width: 44 }, filterBadge: { alignItems: 'center', borderRadius: 9, height: 18, justifyContent: 'center', position: 'absolute', right: -3, top: -3, minWidth: 18 }, filterBadgeText: { fontSize: 10, fontWeight: fontWeights.extraBold },
-  dateGroup: { gap: spacing.sm, marginBottom: spacing.xl },
-  date: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold, marginTop: spacing.sm },
-  row: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
+  dateGroup: { marginBottom: spacing.xl },
+  dateHeader: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', minHeight: 42 },
+  date: { fontSize: fontSizes.caption, fontWeight: fontWeights.extraBold, letterSpacing: 1.4, textTransform: 'uppercase' },
+  dayTransactions: { borderRadius: radii.lg, borderWidth: 1, overflow: 'hidden' },
+  row: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between', minHeight: 76, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   details: { flex: 1 },
   transactionIcon: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
   amounts: { alignItems: 'flex-end' },
