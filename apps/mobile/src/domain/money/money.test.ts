@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   add,
   compare,
+  convertMoney,
   deserializeMoney,
   equals,
   formatMoney,
@@ -65,5 +66,20 @@ describe('money', () => {
   it('rejects malformed values', () => {
     expect(() => parseMajorAmount('12.3.4', 'GEL')).toThrow('Invalid monetary amount');
     expect(() => deserializeMoney({ amountMinor: '10.5', currency: 'USD' })).toThrow('Invalid minor-unit amount');
+  });
+});
+
+describe('convertMoney', () => {
+  it('converts between currencies without floating-point arithmetic', () => {
+    expect(convertMoney(money(10_00n, 'USD'), 'GEL', '2.7015').amountMinor).toBe(27_02n);
+  });
+
+  it('preserves the sign and respects currencies with different minor units', () => {
+    expect(convertMoney(money(-1_000n, 'JPY'), 'KWD', '0.0020505').amountMinor).toBe(-2_051n);
+  });
+
+  it('rejects invalid and non-positive rates', () => {
+    expect(() => convertMoney(money(100n, 'USD'), 'EUR', '0')).toThrow('positive');
+    expect(() => convertMoney(money(100n, 'USD'), 'EUR', '1e-2')).toThrow('Invalid');
   });
 });

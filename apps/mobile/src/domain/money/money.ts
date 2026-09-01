@@ -77,6 +77,23 @@ export function toMajorAmountInput(value: Money): string {
   return `${sign}${digits.slice(0, -precision)}.${digits.slice(-precision)}`;
 }
 
+export function convertMoney(value: Money, targetCurrency: MoneyCurrencyCode, rateDecimal: string): Money {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(rateDecimal);
+  if (!match) throw new Error('Invalid FX rate');
+  const fractionalDigits = match[2]?.length ?? 0;
+  const numerator = BigInt(`${match[1]}${match[2] ?? ''}`);
+  if (numerator <= 0n) throw new Error('FX rate must be positive');
+
+  const sourceScale = 10n ** BigInt(getMinorUnit(value.currency));
+  const targetScale = 10n ** BigInt(getMinorUnit(targetCurrency));
+  const denominator = sourceScale * (10n ** BigInt(fractionalDigits));
+  const scaled = value.amountMinor * numerator * targetScale;
+  const sign = scaled < 0n ? -1n : 1n;
+  const absolute = scaled < 0n ? -scaled : scaled;
+  const rounded = (absolute + denominator / 2n) / denominator;
+  return money(sign * rounded, targetCurrency);
+}
+
 export function formatMoney(value: Money, locale: string) {
   const precision = getMinorUnit(value.currency);
   const scale = 10 ** precision;

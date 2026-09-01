@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { CurrencyCode } from '@/src/settings/settings-context';
+import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
 
 const API_URL = 'https://api.frankfurter.dev/v2';
 const CACHE_PREFIX = 'rttw.fx.v1';
+const LATEST_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export type FxRate = {
   base: string;
@@ -35,7 +36,7 @@ async function fetchRates(url: string): Promise<FxRate[]> {
   return payload.filter(isRate);
 }
 
-export async function getLatestRates(base: CurrencyCode, quotes: CurrencyCode[]) {
+export async function getLatestRates(base: MoneyCurrencyCode, quotes: MoneyCurrencyCode[]) {
   const filtered = quotes.filter((quote) => quote !== base);
   if (filtered.length === 0) return { fetchedAt: new Date().toISOString(), rates: [] } satisfies CachedRates;
 
@@ -51,6 +52,8 @@ export async function getLatestRates(base: CurrencyCode, quotes: CurrencyCode[])
     }
   }
 
+  if (cached && Date.now() - Date.parse(cached.fetchedAt) < LATEST_MAX_AGE_MS) return cached;
+
   try {
     const params = new URLSearchParams({ base, quotes: filtered.join(',') });
     const rates = await fetchRates(`${API_URL}/rates?${params.toString()}`);
@@ -63,7 +66,22 @@ export async function getLatestRates(base: CurrencyCode, quotes: CurrencyCode[])
   }
 }
 
-export async function getRateHistory(base: CurrencyCode, quote: CurrencyCode, from: string, to: string) {
+export async function getHistoricalRateOnOrBefore(base: MoneyCurrencyCode, quote: MoneyCurrencyCode, requestedDate: string): Promise<FxRate> {
+  if (base === quote) return { base, quote, date: requestedDate, rate: 1 };
+  const requested = new Date(`${requestedDate}T00:00:00Z`);
+  if (Number.isNaN(requested.getTime())) throw new Error('Invalid FX date');
+  const from = new Date(requested);
+  from.setUTCDate(from.getUTCDate() - 10);
+  const rates = await getRateHistory(base, quote, from.toISOString().slice(0, 10), requestedDate);
+  const applicable = rates
+    .filter((rate) => rate.date <= requestedDate)
+    .sort((left, right) => right.date.localeCompare(left.date));
+  const result = applicable[0];
+  if (!result) throw new Error(`No published FX rate on or before ${requestedDate}`);
+  return result;
+}
+
+export async function getRateHistory(base: MoneyCurrencyCode, quote: MoneyCurrencyCode, from: string, to: string) {
   const cacheKey = `${CACHE_PREFIX}.history.${base}.${quote}.${from}.${to}`;
   const cachedRaw = await AsyncStorage.getItem(cacheKey);
   if (cachedRaw) {

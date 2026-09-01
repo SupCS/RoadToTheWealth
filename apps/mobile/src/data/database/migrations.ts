@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 7;
+export const DATABASE_VERSION = 8;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -260,6 +260,24 @@ const migrations = [
       ALTER TABLE transfer_links ADD COLUMN fee_transaction_id TEXT REFERENCES transactions(id);
       CREATE UNIQUE INDEX transfer_links_fee_transaction_idx
         ON transfer_links(fee_transaction_id) WHERE fee_transaction_id IS NOT NULL;
+    `,
+  },
+  {
+    version: 8,
+    sql: `
+      CREATE TABLE fx_rate_cache (
+        base_currency_code TEXT NOT NULL CHECK (length(base_currency_code) = 3),
+        quote_currency_code TEXT NOT NULL CHECK (length(quote_currency_code) = 3),
+        requested_date TEXT NOT NULL,
+        effective_date TEXT NOT NULL,
+        rate_decimal TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (base_currency_code, quote_currency_code, requested_date, provider)
+      );
+
+      CREATE INDEX fx_rate_cache_effective_date_idx
+        ON fx_rate_cache(base_currency_code, quote_currency_code, effective_date);
     `,
   },
 ] as const;

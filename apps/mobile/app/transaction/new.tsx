@@ -9,8 +9,9 @@ import type { Account, Category, Transaction, TransactionDetails } from '@/src/d
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { AppTextField, ErrorState, LoadingState, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
-import { money, parseMajorAmount, toMajorAmountInput } from '@/src/domain/money/money';
+import { convertMoney, money, parseMajorAmount, toMajorAmountInput } from '@/src/domain/money/money';
 import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
+import { resolveHistoricalRate } from '@/src/fx/historical-rate';
 import { useSettings } from '@/src/settings/settings-context';
 
 type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income' | 'transfer'>;
@@ -22,7 +23,7 @@ export default function NewTransactionScreen() {
   const router = useRouter();
   const { locale, t, theme } = useSettings();
   const [householdId, setHouseholdId] = useState<string | null>(null);
-  const [baseCurrency, setBaseCurrency] = useState<string | null>(null);
+  const [baseCurrency, setBaseCurrency] = useState<MoneyCurrencyCode | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -203,11 +204,27 @@ export default function NewTransactionScreen() {
           return;
         }
       }
+      let reportingAmount = isBaseCurrency ? signedAmount : null;
+      let fxSnapshot: Transaction['fxSnapshot'] = null;
+      if (!isBaseCurrency) {
+        try {
+          const resolved = await resolveHistoricalRate(db, signedAmount.currency, baseCurrency, date);
+          reportingAmount = convertMoney(signedAmount, baseCurrency, resolved.rateDecimal);
+          fxSnapshot = {
+            rateDecimal: resolved.rateDecimal,
+            provider: resolved.provider,
+            requestedDate: resolved.requestedDate,
+            effectiveDate: resolved.effectiveDate,
+          };
+        } catch {
+          // Offline writes remain valid; the pending transaction can be completed later.
+        }
+      }
       await repository.saveTransaction({
         id: transactionId, householdId, accountId: account.id, memberId, categoryId: splitEnabled ? null : categoryId || null,
         transactionType: type, transactionDate: date, postingDate: null, source: 'manual',
-        status: isBaseCurrency ? 'confirmed' : 'fx_pending', originalAmount: signedAmount,
-        reportingAmount: isBaseCurrency ? signedAmount : null, fxSnapshot: null,
+        status: reportingAmount ? 'confirmed' : 'fx_pending', originalAmount: signedAmount,
+        reportingAmount, fxSnapshot,
         description: description.trim() || null, notes: existing?.transaction.notes ?? null,
         createdAt: existing?.transaction.createdAt ?? now, updatedAt: now,
         createdByMemberId: existing?.transaction.createdByMemberId ?? memberId, updatedByMemberId: memberId,

@@ -34,7 +34,7 @@ describe('migrateDatabase', () => {
 
     await migrateDatabase(state.database as never);
 
-    expect(state.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(state.appliedVersions).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(state.getVersion()).toBe(DATABASE_VERSION);
   });
 
@@ -66,7 +66,7 @@ describe('migrateDatabase', () => {
     expect(schemaSql).toContain('amount_minor INTEGER NOT NULL');
     expect(schemaSql).toContain('revision INTEGER NOT NULL DEFAULT 1');
     expect(schemaSql).toContain('deleted_at TEXT');
-    expect(state.appliedVersions).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(state.appliedVersions).toEqual([2, 3, 4, 5, 6, 7, 8]);
   });
 
   it('adds localized built-in categories in migration 3', async () => {
@@ -77,7 +77,7 @@ describe('migrateDatabase', () => {
     expect(sql).toContain("'Groceries', 'Продукти', 'Продукты'");
     expect(sql).toContain("'Salary', 'Зарплата', 'Зарплата'");
     expect(sql).toContain('categories_system_key_idx');
-    expect(state.appliedVersions).toEqual([3, 4, 5, 6, 7]);
+    expect(state.appliedVersions).toEqual([3, 4, 5, 6, 7, 8]);
   });
 
   it('adds durable links for atomic two-leg transfers in migration 4', async () => {
@@ -88,7 +88,7 @@ describe('migrateDatabase', () => {
     expect(sql).toContain('CREATE TABLE transfer_links');
     expect(sql).toContain('debit_transaction_id TEXT NOT NULL UNIQUE');
     expect(sql).toContain('received_amount_minor INTEGER NOT NULL');
-    expect(state.appliedVersions).toEqual([4, 5, 6, 7]);
+    expect(state.appliedVersions).toEqual([4, 5, 6, 7, 8]);
   });
 
   it('migrates every existing account balance into a currency balance', async () => {
@@ -98,7 +98,7 @@ describe('migrateDatabase', () => {
     const sql = state.executedSql.join('\n');
     expect(sql).toContain('CREATE TABLE account_currency_balances');
     expect(sql).toContain('SELECT id, currency_code, opening_balance_minor');
-    expect(state.appliedVersions).toEqual([5, 6, 7]);
+    expect(state.appliedVersions).toEqual([5, 6, 7, 8]);
   });
 
   it('uses the existing account currency as the initial primary currency', async () => {
@@ -108,7 +108,7 @@ describe('migrateDatabase', () => {
     const sql = state.executedSql.join('\n');
     expect(sql).toContain('ADD COLUMN primary_currency_code');
     expect(sql).toContain('SET primary_currency_code = currency_code');
-    expect(state.appliedVersions).toEqual([6, 7]);
+    expect(state.appliedVersions).toEqual([6, 7, 8]);
   });
 
   it('links an optional fee transaction to a transfer', async () => {
@@ -118,6 +118,17 @@ describe('migrateDatabase', () => {
     const sql = state.executedSql.join('\n');
     expect(sql).toContain('ADD COLUMN fee_transaction_id');
     expect(sql).toContain('transfer_links_fee_transaction_idx');
-    expect(state.appliedVersions).toEqual([7]);
+    expect(state.appliedVersions).toEqual([7, 8]);
+  });
+
+  it('adds the durable historical FX cache in migration 8', async () => {
+    const state = createDatabase(7);
+    await migrateDatabase(state.database as never);
+
+    const sql = state.executedSql.join('\n');
+    expect(sql).toContain('CREATE TABLE fx_rate_cache');
+    expect(sql).toContain('requested_date TEXT NOT NULL');
+    expect(sql).toContain('effective_date TEXT NOT NULL');
+    expect(state.appliedVersions).toEqual([8]);
   });
 });
