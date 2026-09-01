@@ -47,6 +47,25 @@ describe('SQLiteLedgerRepository', () => {
     expect(db.getAllAsync.mock.calls[0]?.[0]).not.toContain("a.ownership_scope = 'personal'");
     expect(db.getAllAsync.mock.calls[1]?.[0]).toContain("a.ownership_scope = 'personal'");
     expect(db.getAllAsync.mock.calls[1]?.[1]).toEqual(['household-1', 'member-1', 'household-1', 'member-1']);
+    expect(db.getAllAsync.mock.calls[0]?.[0]).toContain("IN ('confirmed', 'fx_pending')");
+  });
+
+  it('maps persisted transactions without losing original amount precision', async () => {
+    const db = createDatabase([{
+      id: 'transaction-1', household_id: 'household-1', account_id: 'account-1', member_id: 'member-1',
+      category_id: null, transaction_type: 'expense', transaction_date: '2026-09-01', posting_date: null,
+      source: 'manual', status: 'fx_pending', amount_minor: '-9007199254740993', currency_code: 'USD',
+      reporting_amount_minor: null, reporting_currency_code: null, fx_rate_decimal: null, fx_provider: null,
+      fx_requested_date: null, fx_effective_date: null, description: 'Test', notes: null,
+      created_at: audit.createdAt, updated_at: audit.updatedAt, created_by_member_id: 'member-1',
+      updated_by_member_id: 'member-1', revision: 1, deleted_at: null,
+    }]);
+    const repository = new SQLiteLedgerRepository(db as never);
+
+    const transactions = await repository.listTransactions('household-1');
+
+    expect(transactions[0]?.originalAmount.amountMinor).toBe(-9_007_199_254_740_993n);
+    expect(transactions[0]?.status).toBe('fx_pending');
   });
 
   it('stores multiple opening currency balances for one account', async () => {

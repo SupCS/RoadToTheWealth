@@ -107,5 +107,6 @@ export interface LedgerRepository {
   saveCategory(category: Category): Promise<void>;
   listCategories(householdId: string): Promise<Category[]>;
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
+  listTransactions(householdId: string): Promise<Transaction[]>;
   saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void>;
 }

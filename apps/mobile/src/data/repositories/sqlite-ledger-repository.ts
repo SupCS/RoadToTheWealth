@@ -78,6 +78,16 @@ type CategoryRow = {
   deleted_at: string | null;
 };
 
+type TransactionRow = {
+  id: string; household_id: string; account_id: string; member_id: string | null; category_id: string | null;
+  transaction_type: Transaction['transactionType']; transaction_date: string; posting_date: string | null;
+  source: Transaction['source']; status: Transaction['status']; amount_minor: string; currency_code: MoneyCurrencyCode;
+  reporting_amount_minor: string | null; reporting_currency_code: MoneyCurrencyCode | null;
+  fx_rate_decimal: string | null; fx_provider: string | null; fx_requested_date: string | null; fx_effective_date: string | null;
+  description: string | null; notes: string | null; created_at: string; updated_at: string;
+  created_by_member_id: string | null; updated_by_member_id: string | null; revision: number; deleted_at: string | null;
+};
+
 export class SQLiteLedgerRepository implements LedgerRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
@@ -261,7 +271,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       const rows = await this.db.getAllAsync<AccountBalanceRow>(
         `SELECT ? AS account_id, b.currency_code,
           CAST(b.opening_balance_minor + COALESCE(SUM(
-            CASE WHEN t.status = 'confirmed' AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
+            CASE WHEN t.status IN ('confirmed', 'fx_pending') AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
           ), 0) AS TEXT) AS amount_minor
         FROM account_currency_balances b
         LEFT JOIN transactions t ON t.account_id = b.account_id AND t.currency_code = b.currency_code
@@ -289,7 +299,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         SELECT t.amount_minor AS amount_minor, t.currency_code
         FROM transactions t JOIN accounts a ON a.id = t.account_id
         WHERE a.household_id = ? AND a.deleted_at IS NULL AND a.is_archived = 0 ${personalClause}
-          AND t.status = 'confirmed' AND t.deleted_at IS NULL
+          AND t.status IN ('confirmed', 'fx_pending') AND t.deleted_at IS NULL
       ) balances GROUP BY currency_code ORDER BY currency_code`,
       [...parameters, ...parameters],
     );
@@ -365,6 +375,21 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         );
       }
     });
+  }
+
+  async listTransactions(householdId: string): Promise<Transaction[]> {
+    const rows = await this.db.getAllAsync<TransactionRow>(
+      `SELECT id, household_id, account_id, member_id, category_id, transaction_type,
+        transaction_date, posting_date, source, status, CAST(amount_minor AS TEXT) AS amount_minor,
+        currency_code, CAST(reporting_amount_minor AS TEXT) AS reporting_amount_minor,
+        reporting_currency_code, fx_rate_decimal, fx_provider, fx_requested_date, fx_effective_date,
+        description, notes, created_at, updated_at, created_by_member_id, updated_by_member_id,
+        revision, deleted_at
+      FROM transactions
+      WHERE household_id = ? AND deleted_at IS NULL
+      ORDER BY transaction_date DESC, created_at DESC`, householdId,
+    );
+    return rows.map(mapTransaction);
   }
 
   async saveTransfer(debit: Transaction, credit: Transaction, link: TransferLink, fee?: Transaction): Promise<void> {
@@ -498,6 +523,25 @@ function mapMember(row: MemberRow): HouseholdMember {
     role: row.role, membershipStatus: row.membership_status, createdAt: row.created_at,
     updatedAt: row.updated_at, createdByMemberId: row.created_by_member_id,
     updatedByMemberId: row.updated_by_member_id, revision: row.revision, deletedAt: row.deleted_at,
+  };
+}
+
+function mapTransaction(row: TransactionRow): Transaction {
+  const hasFxSnapshot = row.fx_rate_decimal !== null && row.fx_provider !== null
+    && row.fx_requested_date !== null && row.fx_effective_date !== null;
+  return {
+    id: row.id, householdId: row.household_id, accountId: row.account_id, memberId: row.member_id,
+    categoryId: row.category_id, transactionType: row.transaction_type, transactionDate: row.transaction_date,
+    postingDate: row.posting_date, source: row.source, status: row.status,
+    originalAmount: money(BigInt(row.amount_minor), row.currency_code),
+    reportingAmount: row.reporting_amount_minor !== null && row.reporting_currency_code !== null
+      ? money(BigInt(row.reporting_amount_minor), row.reporting_currency_code) : null,
+    fxSnapshot: hasFxSnapshot ? {
+      rateDecimal: row.fx_rate_decimal!, provider: row.fx_provider!, requestedDate: row.fx_requested_date!, effectiveDate: row.fx_effective_date!,
+    } : null,
+    description: row.description, notes: row.notes, createdAt: row.created_at, updatedAt: row.updated_at,
+    createdByMemberId: row.created_by_member_id, updatedByMemberId: row.updated_by_member_id,
+    revision: row.revision, deletedAt: row.deleted_at,
   };
 }
 
