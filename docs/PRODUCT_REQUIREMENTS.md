@@ -56,10 +56,11 @@ Transfers link two legs and do not affect income/expense reports. They preserve 
 ## 6. Manual entry
 
 - Quick expense/income/transfer flow.
-- Account, amount, currency, date, category, note, tags, and recurring option.
+- Account, amount, currency, date, category, description/note, tags, and recurring option. The optional description stays in the primary entry flow directly below amount; it is not hidden under additional details.
 - Split a transaction among several categories while preserving the original total.
-- Duplicate/edit/delete with undo for destructive actions.
-- Search and filters by period, member, account, category, currency, tag, and source.
+- Duplicate/edit/delete from both a long-press transaction menu and the edit screen; destructive list actions offer undo.
+- Collapsible filters by period, member, account, category, currency, tag, and source.
+- Transaction rows lead with the selected category icon and category name, with the optional transaction description shown beneath it.
 
 ## 7. Statement import
 
@@ -82,7 +83,7 @@ Users can create deterministic merchant/category rules. Rules run locally and ar
 
 ## 8. Categories, budgets, and recurring items
 
-- Built-in localized income and expense categories, custom categories/subcategories, icons, colors, archive, and merge.
+- Built-in localized income and expense categories; custom categories/subcategories require one user-entered name and support selectable themed colors and icons, plus archive and merge.
 - Monthly household, member, and category budgets.
 - Optional rollover and alerts at configurable thresholds.
 - Recurring salary, rent, utilities, subscriptions, loans, and savings transfers.

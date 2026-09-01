@@ -9,7 +9,7 @@ This is the conceptual schema; database migrations will become authoritative onc
 - `household_members`: membership and role.
 - `devices`: sync cursor and revoked state.
 - `accounts`: ownership scope (`personal` or `shared`), nullable personal owner, type, archive state, and one or more currency balances. A currency belongs to a balance within an account, not permanently to the account itself.
-- `categories`: localized/custom label metadata, parent, income/expense applicability.
+- `categories`: localized built-in labels or one custom user-entered label mirrored across locale fields, parent, income/expense applicability, themed color token, and icon.
 - `transactions`: type, dates, source, status, original money, reporting snapshot, description.
 - `transaction_splits`: category allocations whose sum equals the transaction amount.
 - `transfer_links`: links debit/credit legs and an optional separate fee expense.

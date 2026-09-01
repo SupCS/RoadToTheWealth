@@ -8,6 +8,7 @@ import type { Category } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { Card, EmptyState, ErrorState, LoadingState, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, spacing } from '@/src/design/tokens';
+import { resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon } from '@/src/features/categories/category-appearance';
 import { useSettings } from '@/src/settings/settings-context';
 
 type State = { status: 'loading' } | { status: 'error' } | { status: 'ready'; categories: Category[] };
@@ -44,6 +45,7 @@ export default function CategoriesScreen() {
       const editable = category.householdId !== null && category.systemKey === null;
       return <Pressable disabled={!editable} key={category.id} onPress={() => router.push(`/categories/${category.id}` as Href)} style={({ pressed }) => [styles.category, { opacity: pressed ? 0.74 : category.isArchived ? 0.55 : 1 }]}>
         <Card><View style={styles.row}>
+          <View style={[styles.categoryIcon, { backgroundColor: resolveCategoryColor(theme, category.colorToken) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, category.colorToken)} name={resolveCategoryIcon(category.icon)} size={24} /></View>
           <View style={styles.text}>
             <Text style={[styles.name, { color: theme.text }]}>{parent ? `${parent.names[locale]} › ` : ''}{category.names[locale]}</Text>
             <Text style={[styles.meta, { color: theme.muted }]}>{t(categoryApplicabilityKey[category.applicability])}{' · '}{editable ? t('customCategory') : t('builtInCategory')}{category.isArchived ? ` · ${t('archived')}` : ''}</Text>
@@ -65,4 +67,5 @@ const styles = StyleSheet.create({
   text: { flex: 1 },
   name: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },
   meta: { fontSize: fontSizes.caption, marginTop: spacing.xs },
+  categoryIcon: { alignItems: 'center', borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
 });

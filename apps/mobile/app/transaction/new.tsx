@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Account, Category, Transaction, TransactionDetails } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
@@ -12,6 +12,7 @@ import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import { convertMoney, money, parseMajorAmount, toMajorAmountInput } from '@/src/domain/money/money';
 import type { MoneyCurrencyCode } from '@/src/domain/money/currencies';
 import { resolveHistoricalRate } from '@/src/fx/historical-rate';
+import { resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon } from '@/src/features/categories/category-appearance';
 import { useSettings } from '@/src/settings/settings-context';
 
 type EntryType = Extract<Transaction['transactionType'], 'expense' | 'income' | 'transfer'>;
@@ -260,19 +261,30 @@ export default function NewTransactionScreen() {
     }
   }
 
+  function deleteExisting() {
+    if (!existing || !memberId) return;
+    Alert.alert(t('deleteTransaction'), t('deleteTransactionConfirm'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('delete'), style: 'destructive', onPress: () => void repository.softDeleteTransaction(existing.transaction.id, new Date().toISOString(), memberId).then(() => router.replace('/transactions' as Href)).catch(() => Alert.alert(t('transactionDeleteError'))) },
+    ]);
+  }
+
   if (status === 'loading') return <Screen><LoadingState label={t('loading')} /></Screen>;
   if (status === 'error') return <Screen><ErrorState message={t('transactionContextError')} onRetry={() => void load()} retryLabel={t('retry')} /></Screen>;
 
   return (
     <Screen>
-      <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
-        <MaterialCommunityIcons color={theme.primary} name="arrow-left" size={24} />
-        <Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text>
-      </Pressable>
+      <View style={styles.topBar}><Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
+        <MaterialCommunityIcons color={theme.primary} name="arrow-left" size={24} /><Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text>
+      </Pressable>{existing ? <View style={styles.editActions}>
+        <Pressable accessibilityLabel={t('copyTransaction')} accessibilityRole="button" onPress={() => router.replace(`/transaction/new?copyId=${existing.transaction.id}`)} style={[styles.editAction, { backgroundColor: theme.surface, borderColor: theme.border }]}><MaterialCommunityIcons color={theme.primary} name="content-copy" size={22} /></Pressable>
+        <Pressable accessibilityLabel={t('deleteTransaction')} accessibilityRole="button" onPress={deleteExisting} style={[styles.editAction, { backgroundColor: theme.surface, borderColor: theme.border }]}><MaterialCommunityIcons color={theme.danger} name="trash-can-outline" size={23} /></Pressable>
+      </View> : null}</View>
       <ScreenHeader title={existing ? t('editTransaction') : copyId ? t('copyTransaction') : t('addTransaction')} />
       <ChoiceGroup label={t('transactionType')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('transfer'), value: 'transfer' }]} selected={type} onSelect={(value) => changeType(value as EntryType)} />
       {accounts.length === 0 ? <ErrorState message={t('noActiveAccountsForTransaction')} /> : <>
         <AppTextField error={validationError ?? undefined} keyboardType="decimal-pad" label={t('amount')} onChangeText={setAmount} placeholder="0.00" value={amount} />
+        <AppTextField autoCapitalize="sentences" label={`${t('description')} (${t('optional')})`} onChangeText={setDescription} value={description} />
         <ChoiceGroup label={t('account')} options={accounts.map((account) => ({ label: account.name, value: account.id }))} selected={accountId} onSelect={(value) => {
           setAccountId(value);
           const nextAccount = accounts.find((account) => account.id === value);
@@ -295,11 +307,7 @@ export default function NewTransactionScreen() {
               setSplitAmounts((current) => ({ ...current, [value]: current[value] ?? '' }));
             }} />
             {splitCategoryIds.map((id) => <AppTextField key={id} keyboardType="decimal-pad" label={`${categoryLabel(categories.find((category) => category.id === id)!, categories, locale)} · ${t('amount')}`} onChangeText={(value) => setSplitAmounts((current) => ({ ...current, [id]: value }))} value={splitAmounts[id] ?? ''} />)}
-          </> : <ChoiceGroup label={t('category')} optionalLabel={t('optional')} options={applicableCategories.map((category) => ({ label: categoryLabel(category, categories, locale), value: category.id }))} selected={categoryId} onSelect={setCategoryId} />}
-          {showDetails ? <Pressable accessibilityRole="button" onPress={() => router.push('/categories' as Href)} style={styles.manageCategoriesButton}>
-            <MaterialCommunityIcons color={theme.primary} name="shape-plus-outline" size={20} />
-            <Text style={[styles.manageCategoriesLabel, { color: theme.primary }]}>{t('manageCategories')}</Text>
-          </Pressable> : null}
+          </> : <CategoryChoiceGroup categories={applicableCategories} label={t('category')} locale={locale} onSelect={setCategoryId} selected={categoryId} allCategories={categories} />}
         </>}
         {type === 'transfer' ? <AppTextField keyboardType="decimal-pad" label={`${t('transferFee')} (${t('optional')})`} onChangeText={setFeeAmount} value={feeAmount} /> : null}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setShowDetails((value) => !value)} style={styles.detailsButton}>
@@ -308,7 +316,6 @@ export default function NewTransactionScreen() {
         </Pressable>
         {showDetails ? <>
           {type !== 'transfer' && transactionCurrency && baseCurrency && transactionCurrency !== baseCurrency ? <AppTextField keyboardType="decimal-pad" label={`${t('manualRate')} · 1 ${transactionCurrency} = ? ${baseCurrency} (${t('optional')})`} onChangeText={setManualRate} placeholder={t('automaticRate')} value={manualRate} /> : null}
-          <AppTextField autoCapitalize="sentences" label={t('description')} onChangeText={setDescription} value={description} />
           <AppTextField autoCapitalize="none" label={t('transactionDate')} onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
         </> : null}
         <PrimaryButton label={status === 'saving' ? t('saving') : t('save')} onPress={status === 'saving' ? undefined : () => void save()} />
@@ -348,6 +355,20 @@ function MultiChoiceGroup({ label, onToggle, options, selected }: {
   </View>;
 }
 
+function CategoryChoiceGroup({ allCategories, categories, label, locale, onSelect, selected }: {
+  allCategories: Category[]; categories: Category[]; label: string; locale: 'en' | 'uk' | 'ru'; onSelect: (value: string) => void; selected: string;
+}) {
+  const { t, theme } = useSettings();
+  return <View style={styles.group}><Text style={[styles.label, { color: theme.text }]}>{label} ({t('optional')})</Text><View style={styles.categoryChoices}>{categories.map((category) => {
+    const active = category.id === selected;
+    const color = resolveCategoryColor(theme, category.colorToken);
+    return <Pressable accessibilityRole="radio" accessibilityState={{ checked: active }} key={category.id} onPress={() => onSelect(active ? '' : category.id)} style={[styles.categoryChoice, { backgroundColor: active ? color : theme.surface, borderColor: active ? color : theme.border }]}>
+      <View style={[styles.categoryChoiceIcon, { backgroundColor: active ? theme.background : color }]}><MaterialCommunityIcons color={active ? theme.text : resolveCategoryForeground(theme, category.colorToken)} name={resolveCategoryIcon(category.icon)} size={21} /></View>
+      <Text numberOfLines={2} style={[styles.categoryChoiceLabel, { color: active ? resolveCategoryForeground(theme, category.colorToken) : theme.text }]}>{categoryLabel(category, allCategories, locale)}</Text>
+    </Pressable>;
+  })}</View></View>;
+}
+
 function categoryLabel(category: Category, categories: Category[], locale: 'en' | 'uk' | 'ru'): string {
   const parent = category.parentId ? categories.find((candidate) => candidate.id === category.parentId) : null;
   return parent ? `${parent.names[locale]} › ${category.names[locale]}` : category.names[locale];
@@ -365,16 +386,16 @@ function isDateOnly(value: string): boolean {
 }
 
 const styles = StyleSheet.create({
-  backButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44 },
+  topBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg }, backButton: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, minHeight: 44 },
   backLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  editActions: { flexDirection: 'row', gap: spacing.sm }, editAction: { alignItems: 'center', borderRadius: 22, borderWidth: 1, height: 44, justifyContent: 'center', width: 44 },
   group: { gap: spacing.sm, marginBottom: spacing.lg },
   label: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: { borderRadius: radii.lg, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   choiceLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   splitToggle: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  manageCategoriesButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg, minHeight: 44 },
-  manageCategoriesLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
+  categoryChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, categoryChoice: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: '48%' }, categoryChoiceIcon: { alignItems: 'center', borderRadius: 17, height: 34, justifyContent: 'center', width: 34 }, categoryChoiceLabel: { flex: 1, fontSize: fontSizes.caption, fontWeight: fontWeights.bold },
   detailsButton: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, minHeight: 44 },
   detailsLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
 });

@@ -9,6 +9,7 @@ import type { Category } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { AppTextField, ErrorState, LoadingState, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
+import { categoryColorLabelKeys, categoryColorTokens, categoryIconSets, resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon, type CategoryColorToken, type CategoryIconName } from '@/src/features/categories/category-appearance';
 import { useSettings } from '@/src/settings/settings-context';
 
 export default function CategoryEditorScreen() {
@@ -22,7 +23,9 @@ export default function CategoryEditorScreen() {
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [names, setNames] = useState({ en: '', uk: '', ru: '' });
+  const [name, setName] = useState('');
+  const [icon, setIcon] = useState<CategoryIconName>('shape-outline');
+  const [colorToken, setColorToken] = useState<CategoryColorToken>('primary');
   const [applicability, setApplicability] = useState<Category['applicability']>('expense');
   const [parentId, setParentId] = useState('');
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
@@ -32,31 +35,31 @@ export default function CategoryEditorScreen() {
     try {
       const household = await repository.getActiveHousehold();
       if (!household) throw new Error('Household missing');
-      const [member, allCategories, existing] = await Promise.all([
-        repository.getActiveMember(household.id), repository.listCategories(household.id), isNew ? Promise.resolve(null) : repository.getCategory(id),
-      ]);
+      const [member, allCategories, existing] = await Promise.all([repository.getActiveMember(household.id), repository.listCategories(household.id), isNew ? Promise.resolve(null) : repository.getCategory(id)]);
       if (!member || (!isNew && !existing) || existing?.systemKey) throw new Error('Category context missing');
       setHouseholdId(household.id); setMemberId(member.id); setCategories(allCategories);
-      if (existing) { setCategory(existing); setNames(existing.names); setApplicability(existing.applicability); setParentId(existing.parentId ?? ''); }
+      if (existing) {
+        setCategory(existing); setName(existing.names[locale]); setApplicability(existing.applicability); setParentId(existing.parentId ?? '');
+        setIcon(resolveCategoryIcon(existing.icon));
+        setColorToken(categoryColorTokens.includes(existing.colorToken as CategoryColorToken) ? existing.colorToken as CategoryColorToken : 'primary');
+      }
       setStatus('ready');
     } catch { setStatus('error'); }
-  })(); }, [id, isNew, repository]);
+  })(); }, [id, isNew, locale, repository]);
 
   const possibleParents = categories.filter((candidate) => candidate.id !== category?.id && candidate.parentId === null && !candidate.isArchived && (candidate.applicability === applicability || candidate.applicability === 'both'));
 
   async function save() {
-    if (!names.en.trim() || !names.uk.trim() || !names.ru.trim()) { setError(t('categoryNamesRequired')); return; }
+    const trimmedName = name.trim();
+    if (!trimmedName) { setError(t('categoryNamesRequired')); return; }
     if (!householdId || !memberId) return;
     setStatus('saving'); setError(null);
     const now = new Date().toISOString();
     try {
-      await repository.saveCategory({
-        id: category?.id ?? Crypto.randomUUID(), householdId, parentId: parentId || null, applicability,
-        systemKey: null, names: { en: names.en.trim(), uk: names.uk.trim(), ru: names.ru.trim() },
-        icon: category?.icon ?? null, colorToken: category?.colorToken ?? null, isArchived: category?.isArchived ?? false,
+      await repository.saveCategory({ id: category?.id ?? Crypto.randomUUID(), householdId, parentId: parentId || null, applicability, systemKey: null,
+        names: { en: trimmedName, uk: trimmedName, ru: trimmedName }, icon, colorToken, isArchived: category?.isArchived ?? false,
         createdAt: category?.createdAt ?? now, updatedAt: now, createdByMemberId: category?.createdByMemberId ?? memberId,
-        updatedByMemberId: memberId, revision: (category?.revision ?? 0) + 1, deletedAt: null,
-      });
+        updatedByMemberId: memberId, revision: (category?.revision ?? 0) + 1, deletedAt: null });
       router.replace('/categories' as Href);
     } catch { setStatus('ready'); setError(t('categorySaveError')); }
   }
@@ -71,9 +74,12 @@ export default function CategoryEditorScreen() {
   return <Screen>
     <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}><MaterialCommunityIcons color={theme.primary} name="arrow-left" size={24} /><Text style={[styles.backLabel, { color: theme.primary }]}>{t('back')}</Text></Pressable>
     <ScreenHeader title={isNew ? t('newCategory') : t('editCategory')} />
-    <AppTextField label={`${t('categoryName')} · EN`} onChangeText={(value) => setNames((current) => ({ ...current, en: value }))} value={names.en} />
-    <AppTextField label={`${t('categoryName')} · UK`} onChangeText={(value) => setNames((current) => ({ ...current, uk: value }))} value={names.uk} />
-    <AppTextField label={`${t('categoryName')} · RU`} onChangeText={(value) => setNames((current) => ({ ...current, ru: value }))} value={names.ru} />
+    <AppTextField label={t('categoryName')} onChangeText={setName} value={name} />
+    <View style={styles.preview}><View style={[styles.previewIcon, { backgroundColor: resolveCategoryColor(theme, colorToken) }]}><MaterialCommunityIcons color={resolveCategoryForeground(theme, colorToken)} name={icon} size={30} /></View><Text style={[styles.previewName, { color: theme.text }]}>{name.trim() || t('categoryName')}</Text></View>
+    <Text style={[styles.label, { color: theme.text }]}>{t('categoryColor')}</Text>
+    <View accessibilityRole="radiogroup" style={styles.colorChoices}>{categoryColorTokens.map((token) => { const active = token === colorToken; return <Pressable accessibilityLabel={t(categoryColorLabelKeys[token])} accessibilityRole="radio" accessibilityState={{ checked: active }} key={token} onPress={() => setColorToken(token)} style={[styles.colorChoice, { backgroundColor: resolveCategoryColor(theme, token), borderColor: active ? theme.text : theme.border, borderWidth: active ? 3 : 1 }]}>{active ? <MaterialCommunityIcons color={resolveCategoryForeground(theme, token)} name="check" size={22} /> : null}</Pressable>; })}</View>
+    <Text style={[styles.label, { color: theme.text }]}>{t('categoryIcon')}</Text>
+    {categoryIconSets.map((set) => <View key={set.key} style={styles.iconSet}><Text style={[styles.iconSetLabel, { color: theme.muted }]}>{t(set.key)}</Text><View accessibilityRole="radiogroup" style={styles.iconChoices}>{set.icons.map((candidate) => { const active = candidate === icon; return <Pressable accessibilityLabel={candidate} accessibilityRole="radio" accessibilityState={{ checked: active }} key={candidate} onPress={() => setIcon(candidate)} style={[styles.iconChoice, { backgroundColor: active ? resolveCategoryColor(theme, colorToken) : theme.surface, borderColor: active ? resolveCategoryColor(theme, colorToken) : theme.border }]}><MaterialCommunityIcons color={active ? resolveCategoryForeground(theme, colorToken) : theme.text} name={candidate} size={25} /></Pressable>; })}</View></View>)}
     <ChoiceGroup label={t('categoryUsage')} options={[{ label: t('expense'), value: 'expense' }, { label: t('income'), value: 'income' }, { label: t('incomeAndExpense'), value: 'both' }]} selected={applicability} onSelect={(value) => { setApplicability(value as Category['applicability']); setParentId(''); }} />
     <ChoiceGroup label={t('parentCategory')} options={[{ label: t('noParentCategory'), value: '' }, ...possibleParents.map((candidate) => ({ label: candidate.names[locale], value: candidate.id }))]} selected={parentId} onSelect={setParentId} />
     {error ? <Text accessibilityLiveRegion="polite" style={[styles.error, { color: theme.danger }]}>{error}</Text> : null}
@@ -92,4 +98,7 @@ const styles = StyleSheet.create({
   group: { gap: spacing.sm, marginBottom: spacing.lg }, label: { fontSize: fontSizes.body, fontWeight: fontWeights.bold }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   choice: { borderRadius: radii.lg, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, choiceLabel: { fontSize: fontSizes.body, fontWeight: fontWeights.bold },
   error: { fontSize: fontSizes.body, marginVertical: spacing.md }, archiveButton: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, marginTop: spacing.lg, minHeight: 48, justifyContent: 'center', padding: spacing.md }, archiveLabel: { fontSize: fontSizes.button, fontWeight: fontWeights.extraBold },
+  preview: { alignItems: 'center', flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xl }, previewIcon: { alignItems: 'center', borderRadius: radii.lg, height: 52, justifyContent: 'center', width: 52 }, previewName: { flex: 1, fontSize: fontSizes.subtitle, fontWeight: fontWeights.extraBold },
+  colorChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.xl, marginTop: spacing.sm }, colorChoice: { alignItems: 'center', borderRadius: 24, height: 48, justifyContent: 'center', width: 48 },
+  iconSet: { marginBottom: spacing.lg }, iconSetLabel: { fontSize: fontSizes.caption, fontWeight: fontWeights.bold, marginBottom: spacing.sm }, iconChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, iconChoice: { alignItems: 'center', borderRadius: radii.md, borderWidth: 1, height: 46, justifyContent: 'center', width: 46 },
 });

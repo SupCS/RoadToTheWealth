@@ -10,6 +10,7 @@ import { Card, ErrorState, LoadingState, MoneyText } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
 import { formatMoney, type Money } from '@/src/domain/money/money';
 import { deriveReportingAmounts } from '@/src/fx/reporting-amounts';
+import { resolveCategoryIcon } from '@/src/features/categories/category-appearance';
 import { formatDate } from '@/src/i18n/formatters';
 import { useSettings } from '@/src/settings/settings-context';
 
@@ -119,7 +120,7 @@ export function DashboardOverview() {
       <Text style={[styles.sectionMeta, { color: theme.muted }]}>{baseCurrency}</Text>
     </View>
     {categoryRows.length ? <Card>{categoryRows.slice(0, 6).map((row, index) => <View key={row.id} style={[styles.categoryRow, index > 0 && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
-      <View style={[styles.categoryIcon, { backgroundColor: theme.background }]}><MaterialCommunityIcons color={theme.primary} name={(row.icon || 'shape-outline') as never} size={22} /></View>
+      <View style={[styles.categoryIcon, { backgroundColor: theme.background }]}><MaterialCommunityIcons color={theme.primary} name={resolveCategoryIcon(row.icon ?? null)} size={22} /></View>
       <View style={styles.categoryMain}>
         <View style={styles.categoryLabels}><Text numberOfLines={1} style={[styles.categoryName, { color: theme.text }]}>{row.name}</Text><Text style={[styles.categoryPercent, { color: theme.muted }]}>{row.percent}%</Text></View>
         <View style={[styles.track, { backgroundColor: theme.background }]}><View style={[styles.fill, { backgroundColor: theme.primary, width: `${row.percent}%` }]} /></View>
