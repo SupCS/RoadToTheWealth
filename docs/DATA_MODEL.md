@@ -18,7 +18,9 @@ This is the conceptual schema; database migrations will become authoritative onc
 - `import_rows`: source fingerprint, normalized result, review outcome.
 - `categorization_rules`: ordered deterministic match/action rules.
 - `budgets`: scope, period, amount, rollover and warning thresholds.
-- `recurring_rules`: schedule and generation policy.
+- `recurring_rules`: an offline schedule linked to a template transaction, with daily, weekly, monthly,
+  or every-N-days frequency, optional end date, active state, and audit metadata. Upcoming occurrences
+  are projections and do not affect balances until an occurrence is posted as a confirmed transaction.
 - `goals`: target, linked account, dates, priority and status.
 - `goal_contributions`: transaction-linked or manual progress entries.
 - `roadmaps` and `roadmap_steps`: ordered/dependent goal plans.
@@ -45,6 +47,9 @@ Synchronized entities generally include UUID, household ID, created/updated time
 - A transfer moves an unchanged amount in one currency between two account currency balances. Currency exchange is a separate operation, not a cross-currency transfer.
 - Transfer legs are linked and reports exclude their principal from income/expense.
 - FX snapshots are immutable after confirmation unless an audited user correction occurs.
+- Current balances and historical spending include only posted transactions whose financial date is not
+  in the future. Planned and future-dated transactions are excluded from actuals and may only appear in
+  explicitly labelled forecasts or planned overlays.
 - Import fingerprint uniqueness is scoped to account/source, not globally.
 - Server access always checks active household membership.
 - Household and current-user balances are independently derived views: household balance includes each household-visible account once, while current-user balance includes only personal accounts owned by that user. A shared account is never silently counted as a user's personal balance.

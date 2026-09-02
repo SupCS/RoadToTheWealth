@@ -1,11 +1,11 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import * as Crypto from 'expo-crypto';
-import { type Href, useLocalSearchParams, useRouter } from 'expo-router';
+import { type Href, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { Account, Category, Transaction, TransactionDetails } from '@/src/data/repositories/ledger-repository';
+import type { Account, Category, RecurringRule, Transaction, TransactionDetails } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { AppTextField, ErrorState, LoadingState, PrimaryButton, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
@@ -42,6 +42,9 @@ export default function NewTransactionScreen() {
   const [manualRate, setManualRate] = useState('');
   const [date, setDate] = useState(todayLocal());
   const [description, setDescription] = useState('');
+  const [recurrence, setRecurrence] = useState<'none' | RecurringRule['frequency']>('none');
+  const [recurrenceInterval, setRecurrenceInterval] = useState('2');
+  const [existingRule, setExistingRule] = useState<RecurringRule | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'error'>('loading');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(Boolean(id || copyId));
@@ -51,9 +54,10 @@ export default function NewTransactionScreen() {
     try {
       const household = await repository.getActiveHousehold();
       if (!household) throw new Error('Household missing');
-      const [member, allAccounts, allCategories, details] = await Promise.all([
+      const [member, allAccounts, allCategories, details, recurringRule] = await Promise.all([
         repository.getActiveMember(household.id), repository.listAccounts(household.id), repository.listCategories(household.id),
         id || copyId ? repository.getTransaction(id ?? copyId!) : Promise.resolve(null),
+        id ? repository.getRecurringRuleForTransaction(id) : Promise.resolve(null),
       ]);
       if (!member) throw new Error('Member missing');
       const activeAccounts = allAccounts.filter((account) => !account.isArchived);
@@ -87,13 +91,18 @@ export default function NewTransactionScreen() {
           })));
         }
       }
+      if (recurringRule) {
+        setExistingRule(recurringRule);
+        setRecurrence(recurringRule.frequency);
+        setRecurrenceInterval(String(recurringRule.interval));
+      }
       setStatus('ready');
     } catch {
       setStatus('error');
     }
   }
 
-  useEffect(() => { void load(); }, [copyId, id, repository]);
+  useFocusEffect(useCallback(() => { void load(); }, [copyId, id, repository]));
   const applicableCategories = categories.filter((category) => category.applicability === type || category.applicability === 'both');
   const sourceAccount = accounts.find((account) => account.id === accountId);
   const destinationAccounts = accounts.filter((account) => account.id !== accountId && account.openingBalances.some((balance) => balance.currency === transactionCurrency));
@@ -122,6 +131,11 @@ export default function NewTransactionScreen() {
     }
     if (!isDateOnly(date)) {
       setValidationError(t('invalidDate'));
+      return;
+    }
+    const interval = recurrence === 'interval_days' ? Number(recurrenceInterval) : 1;
+    if (recurrence !== 'none' && (!Number.isInteger(interval) || interval < 1)) {
+      setValidationError(t('invalidRepeatInterval'));
       return;
     }
     setValidationError(null);
@@ -247,13 +261,24 @@ export default function NewTransactionScreen() {
       await repository.saveTransaction({
         id: transactionId, householdId, accountId: account.id, memberId, categoryId: splitEnabled ? null : categoryId || null,
         transactionType: type, transactionDate: date, postingDate: null, source: 'manual',
-        status: reportingAmount ? 'confirmed' : 'fx_pending', originalAmount: signedAmount,
+        status: date > todayLocal() ? 'planned' : reportingAmount ? 'confirmed' : 'fx_pending', originalAmount: signedAmount,
         reportingAmount, fxSnapshot,
         description: description.trim() || null, notes: existing?.transaction.notes ?? null,
         createdAt: existing?.transaction.createdAt ?? now, updatedAt: now,
         createdByMemberId: existing?.transaction.createdByMemberId ?? memberId, updatedByMemberId: memberId,
         revision: (existing?.transaction.revision ?? 0) + 1, deletedAt: null,
       }, splits);
+      if (recurrence !== 'none') {
+        await repository.saveRecurringRule({
+          id: existingRule?.id ?? Crypto.randomUUID(), householdId, templateTransactionId: transactionId,
+          frequency: recurrence, interval, startsOn: date, endsOn: null, isActive: true,
+          createdAt: existingRule?.createdAt ?? now, updatedAt: now,
+          createdByMemberId: existingRule?.createdByMemberId ?? memberId, updatedByMemberId: memberId,
+          revision: (existingRule?.revision ?? 0) + 1, deletedAt: null,
+        });
+      } else if (existingRule) {
+        await repository.deleteRecurringRuleForTransaction(transactionId, now, memberId);
+      }
       router.replace('/transactions' as Href);
     } catch {
       setStatus('ready');
@@ -310,6 +335,14 @@ export default function NewTransactionScreen() {
           </> : <CategoryChoiceGroup categories={applicableCategories} label={t('category')} locale={locale} onSelect={setCategoryId} selected={categoryId} allCategories={categories} />}
         </>}
         {type === 'transfer' ? <AppTextField keyboardType="decimal-pad" label={`${t('transferFee')} (${t('optional')})`} onChangeText={setFeeAmount} value={feeAmount} /> : null}
+        {type !== 'transfer' ? <>
+          <ChoiceGroup label={t('repeats')} options={[
+            { label: t('doesNotRepeat'), value: 'none' }, { label: t('repeatDaily'), value: 'daily' },
+            { label: t('repeatWeekly'), value: 'weekly' }, { label: t('repeatMonthly'), value: 'monthly' },
+            { label: t('repeatEveryNDays'), value: 'interval_days' },
+          ]} selected={recurrence} onSelect={(value) => setRecurrence(value as typeof recurrence)} />
+          {recurrence === 'interval_days' ? <AppTextField keyboardType="number-pad" label={t('repeatIntervalDays')} onChangeText={setRecurrenceInterval} value={recurrenceInterval} /> : null}
+        </> : null}
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: showDetails }} onPress={() => setShowDetails((value) => !value)} style={styles.detailsButton}>
           <MaterialCommunityIcons color={theme.primary} name={showDetails ? 'chevron-up' : 'tune-variant'} size={21} />
           <Text style={[styles.detailsLabel, { color: theme.primary }]}>{t(showDetails ? 'fewerDetails' : 'additionalDetails')}</Text>

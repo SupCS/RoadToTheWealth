@@ -11,6 +11,7 @@ import type {
   Household,
   HouseholdMember,
   LedgerRepository,
+  RecurringRule,
   Transaction,
   TransactionDetails,
   TransactionSplit,
@@ -94,6 +95,13 @@ type TransactionSplitRow = {
   id: string; household_id: string; transaction_id: string; category_id: string;
   amount_minor: string; currency_code: MoneyCurrencyCode; created_at: string; updated_at: string;
   created_by_member_id: string | null; updated_by_member_id: string | null; revision: number; deleted_at: string | null;
+};
+
+type RecurringRuleRow = {
+  id: string; household_id: string; template_transaction_id: string; frequency: RecurringRule['frequency'];
+  interval_count: number; starts_on: string; ends_on: string | null; is_active: number;
+  created_at: string; updated_at: string; created_by_member_id: string | null;
+  updated_by_member_id: string | null; revision: number; deleted_at: string | null;
 };
 
 export class SQLiteLedgerRepository implements LedgerRepository {
@@ -279,7 +287,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       const rows = await this.db.getAllAsync<AccountBalanceRow>(
         `SELECT ? AS account_id, b.currency_code,
           CAST(b.opening_balance_minor + COALESCE(SUM(
-            CASE WHEN t.status IN ('confirmed', 'fx_pending') AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
+            CASE WHEN t.status IN ('confirmed', 'fx_pending') AND t.transaction_date <= date('now', 'localtime') AND t.deleted_at IS NULL THEN t.amount_minor ELSE 0 END
           ), 0) AS TEXT) AS amount_minor
         FROM account_currency_balances b
         LEFT JOIN transactions t ON t.account_id = b.account_id AND t.currency_code = b.currency_code
@@ -307,7 +315,7 @@ export class SQLiteLedgerRepository implements LedgerRepository {
         SELECT t.amount_minor AS amount_minor, t.currency_code
         FROM transactions t JOIN accounts a ON a.id = t.account_id
         WHERE a.household_id = ? AND a.deleted_at IS NULL AND a.is_archived = 0 ${personalClause}
-          AND t.status IN ('confirmed', 'fx_pending') AND t.deleted_at IS NULL
+          AND t.status IN ('confirmed', 'fx_pending') AND t.transaction_date <= date('now', 'localtime') AND t.deleted_at IS NULL
       ) balances GROUP BY currency_code ORDER BY currency_code`,
       [...parameters, ...parameters],
     );
@@ -429,6 +437,45 @@ export class SQLiteLedgerRepository implements LedgerRepository {
       ORDER BY transaction_date DESC, created_at DESC`, householdId,
     );
     return rows.map(mapTransaction);
+  }
+
+  async saveRecurringRule(value: RecurringRule): Promise<void> {
+    if (value.interval < 1 || !Number.isInteger(value.interval)) throw new Error('Recurring interval must be a positive integer');
+    await this.db.runAsync(
+      `INSERT INTO recurring_rules (
+        id, household_id, template_transaction_id, frequency, interval_count, starts_on, ends_on, is_active,
+        created_at, updated_at, created_by_member_id, updated_by_member_id, revision, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(template_transaction_id) DO UPDATE SET
+        frequency = excluded.frequency, interval_count = excluded.interval_count, starts_on = excluded.starts_on,
+        ends_on = excluded.ends_on, is_active = excluded.is_active, updated_at = excluded.updated_at,
+        updated_by_member_id = excluded.updated_by_member_id, revision = excluded.revision, deleted_at = excluded.deleted_at`,
+      value.id, value.householdId, value.templateTransactionId, value.frequency, value.interval,
+      value.startsOn, value.endsOn, value.isActive ? 1 : 0, value.createdAt, value.updatedAt,
+      value.createdByMemberId, value.updatedByMemberId, value.revision, value.deletedAt,
+    );
+  }
+
+  async getRecurringRuleForTransaction(transactionId: string): Promise<RecurringRule | null> {
+    const row = await this.db.getFirstAsync<RecurringRuleRow>(
+      `SELECT * FROM recurring_rules WHERE template_transaction_id = ? AND deleted_at IS NULL`, transactionId,
+    );
+    return row ? mapRecurringRule(row) : null;
+  }
+
+  async listRecurringRules(householdId: string): Promise<RecurringRule[]> {
+    const rows = await this.db.getAllAsync<RecurringRuleRow>(
+      `SELECT * FROM recurring_rules WHERE household_id = ? AND deleted_at IS NULL AND is_active = 1 ORDER BY starts_on`, householdId,
+    );
+    return rows.map(mapRecurringRule);
+  }
+
+  async deleteRecurringRuleForTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void> {
+    await this.db.runAsync(
+      `UPDATE recurring_rules SET deleted_at = ?, updated_at = ?, updated_by_member_id = ?, revision = revision + 1
+      WHERE template_transaction_id = ? AND deleted_at IS NULL`,
+      deletedAt, deletedAt, updatedByMemberId, transactionId,
+    );
   }
 
   async completePendingFx(transactionId: string, reportingAmount: Money, fxSnapshot: NonNullable<Transaction['fxSnapshot']>, updatedAt: string): Promise<boolean> {
@@ -671,6 +718,16 @@ function mapTransactionSplit(row: TransactionSplitRow): TransactionSplit {
     categoryId: row.category_id, amount: money(BigInt(row.amount_minor), row.currency_code),
     createdAt: row.created_at, updatedAt: row.updated_at, createdByMemberId: row.created_by_member_id,
     updatedByMemberId: row.updated_by_member_id, revision: row.revision, deletedAt: row.deleted_at,
+  };
+}
+
+function mapRecurringRule(row: RecurringRuleRow): RecurringRule {
+  return {
+    id: row.id, householdId: row.household_id, templateTransactionId: row.template_transaction_id,
+    frequency: row.frequency, interval: row.interval_count, startsOn: row.starts_on, endsOn: row.ends_on,
+    isActive: row.is_active === 1, createdAt: row.created_at, updatedAt: row.updated_at,
+    createdByMemberId: row.created_by_member_id, updatedByMemberId: row.updated_by_member_id,
+    revision: row.revision, deletedAt: row.deleted_at,
   };
 }
 

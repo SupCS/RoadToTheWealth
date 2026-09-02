@@ -87,6 +87,16 @@ export type TransactionSplit = AuditFields & Readonly<{
 
 export type TransactionDetails = Readonly<{ transaction: Transaction; splits: TransactionSplit[] }>;
 
+export type RecurringRule = AuditFields & Readonly<{
+  householdId: string;
+  templateTransactionId: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'interval_days';
+  interval: number;
+  startsOn: string;
+  endsOn: string | null;
+  isActive: boolean;
+}>;
+
 export type TransferLink = AuditFields & Readonly<{
   householdId: string;
   debitTransactionId: string;
@@ -114,6 +124,10 @@ export interface LedgerRepository {
   saveTransaction(transaction: Transaction, splits: TransactionSplit[]): Promise<void>;
   getTransaction(transactionId: string): Promise<TransactionDetails | null>;
   listTransactions(householdId: string): Promise<Transaction[]>;
+  saveRecurringRule(rule: RecurringRule): Promise<void>;
+  getRecurringRuleForTransaction(transactionId: string): Promise<RecurringRule | null>;
+  listRecurringRules(householdId: string): Promise<RecurringRule[]>;
+  deleteRecurringRuleForTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void>;
   completePendingFx(transactionId: string, reportingAmount: Money, fxSnapshot: NonNullable<Transaction['fxSnapshot']>, updatedAt: string): Promise<boolean>;
   softDeleteTransaction(transactionId: string, deletedAt: string, updatedByMemberId: string): Promise<void>;
   restoreTransaction(transactionId: string, updatedAt: string, updatedByMemberId: string): Promise<void>;

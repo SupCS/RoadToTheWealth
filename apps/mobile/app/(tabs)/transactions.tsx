@@ -4,7 +4,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import type { Account, Category, Transaction } from '@/src/data/repositories/ledger-repository';
+import type { Account, Category, RecurringRule, Transaction } from '@/src/data/repositories/ledger-repository';
 import { SQLiteLedgerRepository } from '@/src/data/repositories/sqlite-ledger-repository';
 import { Card, EmptyState, ErrorState, LoadingState, MoneyText, Screen, ScreenHeader } from '@/src/design/layout';
 import { fontSizes, fontWeights, radii, spacing } from '@/src/design/tokens';
@@ -12,11 +12,12 @@ import { formatDate } from '@/src/i18n/formatters';
 import { deriveReportingAmounts } from '@/src/fx/reporting-amounts';
 import { resolveCategoryColor, resolveCategoryForeground, resolveCategoryIcon } from '@/src/features/categories/category-appearance';
 import { useSettings } from '@/src/settings/settings-context';
+import { addDays, buildUpcomingItems } from '@/src/domain/recurring/schedule';
 
 type LoadState =
   | { status: 'loading' }
   | { status: 'error' }
-  | { status: 'ready'; accounts: Account[]; categories: Category[]; memberId: string | null; transactions: Transaction[] };
+  | { status: 'ready'; accounts: Account[]; categories: Category[]; memberId: string | null; recurringRules: RecurringRule[]; transactions: Transaction[] };
 
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
@@ -30,6 +31,7 @@ export default function TransactionsScreen() {
   const [currencyFilter, setCurrencyFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | Transaction['source']>('all');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [plannedOpen, setPlannedOpen] = useState(false);
   const [actionTransaction, setActionTransaction] = useState<Transaction | null>(null);
   const [lastDeletedId, setLastDeletedId] = useState<string | null>(null);
   const [reportingAmounts, setReportingAmounts] = useState<Record<string, Transaction['originalAmount']>>({});
@@ -39,13 +41,14 @@ export default function TransactionsScreen() {
     try {
       const household = await repository.getActiveHousehold();
       if (!household) {
-        setState({ status: 'ready', accounts: [], categories: [], memberId: null, transactions: [] });
+        setState({ status: 'ready', accounts: [], categories: [], memberId: null, recurringRules: [], transactions: [] });
         return;
       }
-      const [accounts, categories, member, transactions] = await Promise.all([
+      const [accounts, categories, member, transactions, recurringRules] = await Promise.all([
         repository.listAccounts(household.id), repository.listCategories(household.id), repository.getActiveMember(household.id), repository.listTransactions(household.id),
+        repository.listRecurringRules(household.id),
       ]);
-      setState({ status: 'ready', accounts, categories, memberId: member?.id ?? null, transactions });
+      setState({ status: 'ready', accounts, categories, memberId: member?.id ?? null, recurringRules, transactions });
       setReportingAmounts({});
       void deriveReportingAmounts(db, transactions, baseCurrency).then(setReportingAmounts).catch(() => undefined);
     } catch {
@@ -65,6 +68,14 @@ export default function TransactionsScreen() {
 
   const activeFilterCount = [typeFilter, accountFilter, categoryFilter, currencyFilter, sourceFilter].filter((value) => value !== 'all').length;
   const currencies = state.status === 'ready' ? [...new Set(state.transactions.map((transaction) => transaction.originalAmount.currency))] : [];
+  const today = toIsoDate(new Date());
+  const recurringTemplateIds = new Set(state.status === 'ready' ? state.recurringRules.map((rule) => rule.templateTransactionId) : []);
+  const standalonePlanned = visibleTransactions.filter((transaction) => (transaction.status === 'planned' || transaction.transactionDate > today) && !recurringTemplateIds.has(transaction.id));
+  const recurringPlanned = state.status === 'ready'
+    ? buildUpcomingItems(state.recurringRules, visibleTransactions, today, addDays(today, 365), 500)
+    : [];
+  const plannedCount = standalonePlanned.length + recurringPlanned.length;
+  const completedTransactions = visibleTransactions.filter((transaction) => transaction.status !== 'planned' && transaction.transactionDate <= today);
 
   function confirmDelete(transactionId: string, memberId: string) {
     Alert.alert(t('deleteTransaction'), t('deleteTransactionConfirm'), [
@@ -97,6 +108,25 @@ export default function TransactionsScreen() {
       {state.status === 'ready' && state.transactions.length > 0 ? <>
         <Text style={[styles.reportingCurrency, { color: theme.muted }]}>{t('reportingCurrency')}: {baseCurrency}</Text>
       </> : null}
+      {state.status === 'ready' && plannedCount > 0 ? <View style={styles.plannedSection}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: plannedOpen }} onPress={() => setPlannedOpen((value) => !value)} style={[styles.plannedHeader, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.plannedHeading}><MaterialCommunityIcons color={theme.warning} name="calendar-clock-outline" size={22} /><Text style={[styles.plannedTitle, { color: theme.text }]}>{t('plannedTransactions')}</Text><View style={[styles.plannedBadge, { backgroundColor: theme.warning }]}><Text style={[styles.plannedBadgeText, { color: theme.background }]}>{plannedCount}</Text></View></View>
+          <MaterialCommunityIcons color={theme.muted} name={plannedOpen ? 'chevron-up' : 'chevron-down'} size={23} />
+        </Pressable>
+        {plannedOpen ? <View style={[styles.plannedList, { backgroundColor: theme.surface, borderColor: theme.border }]}>{[
+          ...standalonePlanned.map((transaction) => ({ key: transaction.id, templateId: transaction.id, transaction, occurrenceDate: transaction.transactionDate })),
+          ...recurringPlanned.map((item) => ({ key: `${item.rule.id}:${item.occurrenceDate}`, templateId: item.transaction.id, transaction: item.transaction, occurrenceDate: item.occurrenceDate })),
+        ].sort((a, b) => a.occurrenceDate.localeCompare(b.occurrenceDate)).map((item) => {
+          const { transaction } = item;
+          const category = state.categories.find((candidate) => candidate.id === transaction.categoryId);
+          return <Pressable key={item.key} onLongPress={() => showTransactionActions(transaction)} onPress={() => router.push(`/transaction/new?id=${item.templateId}`)} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
+            <View style={[styles.plannedRow, { borderBottomColor: theme.border }]}>
+              <View style={styles.plannedDate}><Text style={[styles.plannedDay, { color: theme.warning }]}>{formatDate(item.occurrenceDate, locale)}</Text><Text numberOfLines={1} style={[styles.plannedName, { color: theme.text }]}>{transaction.description || category?.names[locale] || t(transactionTypeKey[transaction.transactionType])}</Text></View>
+              <MoneyText locale={locale} value={{ ...transaction.originalAmount, amountMinor: transaction.originalAmount.amountMinor < 0n ? -transaction.originalAmount.amountMinor : transaction.originalAmount.amountMinor }} />
+            </View>
+          </Pressable>;
+        })}</View> : null}
+      </View> : null}
       {state.status === 'loading' ? <LoadingState label={t('loadingTransactions')} /> : null}
       {state.status === 'error' ? <Card><ErrorState message={t('transactionsLoadError')} onRetry={() => void load()} retryLabel={t('retry')} /></Card> : null}
       {state.status === 'ready' && state.transactions.length === 0 ? <EmptyState
@@ -104,8 +134,8 @@ export default function TransactionsScreen() {
         icon={<MaterialCommunityIcons color={theme.primary} name="receipt-text-outline" size={46} />}
         title={t('noTransactions')}
       /> : null}
-      {state.status === 'ready' && state.transactions.length > 0 && visibleTransactions.length === 0 ? <EmptyState description={t('noMatchingTransactionsHint')} icon={<MaterialCommunityIcons color={theme.primary} name="magnify" size={46} />} title={t('noMatchingTransactions')} /> : null}
-      {state.status === 'ready' ? groupByDate(visibleTransactions).map(([date, transactions]) => <View key={date} style={styles.dateGroup}>
+      {state.status === 'ready' && state.transactions.length > 0 && completedTransactions.length === 0 && plannedCount === 0 ? <EmptyState description={t('noMatchingTransactionsHint')} icon={<MaterialCommunityIcons color={theme.primary} name="magnify" size={46} />} title={t('noMatchingTransactions')} /> : null}
+      {state.status === 'ready' ? groupByDate(completedTransactions).map(([date, transactions]) => <View key={date} style={styles.dateGroup}>
         <View style={[styles.dateHeader, { borderBottomColor: theme.border }]}>
           <Text style={[styles.date, { color: theme.muted }]}>{formatDateGroup(date, locale, t)}</Text>
           <MoneyText locale={locale} tone={getDailyTotal(transactions, reportingAmounts, baseCurrency) < 0n ? 'danger' : getDailyTotal(transactions, reportingAmounts, baseCurrency) > 0n ? 'positive' : 'default'} value={{ amountMinor: getDailyTotal(transactions, reportingAmounts, baseCurrency), currency: baseCurrency }} />
@@ -225,6 +255,15 @@ const styles = StyleSheet.create({
   amounts: { alignItems: 'flex-end' },
   convertedLabel: { fontSize: fontSizes.label, marginTop: spacing.xs },
   reportingCurrency: { fontSize: fontSizes.caption, marginBottom: spacing.md },
+  plannedSection: { marginBottom: spacing.xl },
+  plannedHeader: { alignItems: 'center', borderRadius: radii.lg, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', minHeight: 56, paddingHorizontal: spacing.md },
+  plannedHeading: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
+  plannedTitle: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },
+  plannedBadge: { alignItems: 'center', borderRadius: 11, justifyContent: 'center', minHeight: 22, minWidth: 22, paddingHorizontal: spacing.xs },
+  plannedBadgeText: { fontSize: fontSizes.caption, fontWeight: fontWeights.extraBold },
+  plannedList: { borderBottomLeftRadius: radii.lg, borderBottomRightRadius: radii.lg, borderWidth: 1, borderTopWidth: 0, overflow: 'hidden' },
+  plannedRow: { alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: spacing.md, minHeight: 64, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  plannedDate: { flex: 1 }, plannedDay: { fontSize: fontSizes.caption, fontWeight: fontWeights.extraBold }, plannedName: { fontSize: fontSizes.body, fontWeight: fontWeights.bold, marginTop: spacing.xs },
   transactionTitle: { fontSize: fontSizes.body, fontWeight: fontWeights.extraBold },
   description: { fontSize: fontSizes.caption, marginTop: spacing.xs },
   meta: { fontSize: fontSizes.caption, marginTop: spacing.xs },

@@ -60,6 +60,7 @@ describe('SQLiteLedgerRepository', () => {
     expect(db.getAllAsync.mock.calls[1]?.[0]).toContain("a.ownership_scope = 'personal'");
     expect(db.getAllAsync.mock.calls[1]?.[1]).toEqual(['household-1', 'member-1', 'household-1', 'member-1']);
     expect(db.getAllAsync.mock.calls[0]?.[0]).toContain("IN ('confirmed', 'fx_pending')");
+    expect(db.getAllAsync.mock.calls[0]?.[0]).toContain("transaction_date <= date('now', 'localtime')");
   });
 
   it('maps persisted transactions without losing original amount precision', async () => {

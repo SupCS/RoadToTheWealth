@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 export const DATABASE_NAME = 'rttw.db';
-export const DATABASE_VERSION = 9;
+export const DATABASE_VERSION = 10;
 
 type MigrationDatabase = Pick<SQLiteDatabase, 'execAsync' | 'getFirstAsync' | 'withExclusiveTransactionAsync'>;
 
@@ -284,6 +284,31 @@ const migrations = [
     version: 9,
     sql: `
       ALTER TABLE categories ADD COLUMN icon_color TEXT;
+    `,
+  },
+  {
+    version: 10,
+    sql: `
+      CREATE TABLE recurring_rules (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES households(id),
+        template_transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id),
+        frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'interval_days')),
+        interval_count INTEGER NOT NULL DEFAULT 1 CHECK (interval_count > 0),
+        starts_on TEXT NOT NULL,
+        ends_on TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        created_by_member_id TEXT REFERENCES household_members(id),
+        updated_by_member_id TEXT REFERENCES household_members(id),
+        revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+        deleted_at TEXT,
+        CHECK (ends_on IS NULL OR ends_on >= starts_on)
+      );
+
+      CREATE INDEX recurring_rules_household_idx
+        ON recurring_rules(household_id, is_active, deleted_at, starts_on);
     `,
   },
 ] as const;
